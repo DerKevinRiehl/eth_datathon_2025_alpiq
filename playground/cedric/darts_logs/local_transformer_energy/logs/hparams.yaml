@@ -1,0 +1,33 @@
+activation: relu
+custom_decoder: null
+custom_encoder: null
+d_model: 64
+dim_feedforward: 512
+dropout: 0.1
+input_chunk_length: 168
+input_size: 29
+likelihood: null
+lr_scheduler_cls: null
+lr_scheduler_kwargs: null
+nhead: 4
+norm_type: null
+nr_params: 1
+num_decoder_layers: 3
+num_encoder_layers: 3
+optimizer_cls: !!python/name:torch.optim.adam.Adam ''
+optimizer_kwargs: null
+output_chunk_length: 24
+output_chunk_shift: 0
+output_size: 1
+train_sample_shape:
+- !!python/tuple
+  - 168
+  - 1
+- !!python/tuple
+  - 168
+  - 28
+- null
+- !!python/tuple
+  - 24
+  - 1
+use_reversible_instance_norm: false
