@@ -196,5 +196,5 @@ def main(zone: str):
 
 
 if __name__ == "__main__":
-    country = "IT"  # it can be ES or IT
+    country = "ES"  # it can be ES or IT
     main(country)
