@@ -11,6 +11,31 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import HistGradientBoostingRegressor
 import seaborn as sns 
 
+# got data from: https://ec.europa.eu/eurostat/databrowser/view/sts_inpr_m__custom_16137551/default/table?lang=en
+# production index data handling from CSV
+production_index_path = "../../data/1_original/OneDrive_2025-04-05/Alpiq ETHdatathon challenge 2025/datasets2025/industry_index.csv"
+
+# Modified approach for loading the CSV - explicitly convert TIME_PERIOD to datetime
+production_index = pd.read_csv(production_index_path, usecols=["geo", "OBS_VALUE", "TIME_PERIOD"])
+production_index = production_index.rename(columns={"OBS_VALUE": "production_index", "TIME_PERIOD": "time"})
+
+# Explicitly convert the time column to datetime
+production_index['time'] = pd.to_datetime(production_index['time'])
+
+# add variables for month and year
+production_index['month'] = production_index['time'].dt.month
+production_index['year'] = production_index['time'].dt.year
+
+production_index_spain = production_index[production_index["geo"] == "ES"]
+production_index_spain = production_index_spain.drop(columns=["geo"])
+production_index_spain = production_index_spain.reset_index(drop=True)
+
+production_index_italy = production_index[production_index["geo"] == "IT"]
+production_index_italy = production_index_italy.drop(columns=["geo"])
+production_index_italy = production_index_italy.reset_index(drop=True)
+
+
+
 
 
 # METHODS
@@ -53,6 +78,7 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
     # Create binary variables for each month of the year (1-12)
     for month in range(1, 13):
         features3[f'month_{month}'] = (features3['time'].dt.month == month).astype(int)
+
     # CREATE FINAL FEATURE DATASET
     features = features.merge(features2, on="time", how="left").merge(features3, on="time", how="left")
     # DETERMINE CUSTOMERS
@@ -60,13 +86,16 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
     for column_name in consumptions.columns:
         if "VALUEMWH" in column_name:
             customer_names.append("_".join(column_name.split("_")[1:]))
+
+
+
     # Return
     return consumptions, features, customer_names
 
 def getDataForCustomer(customer, consumptions, features):
     Y = consumptions[["time", "VALUEMWHMETERINGDATA_"+customer]]
     Y = Y.rename(columns={"VALUEMWHMETERINGDATA_"+customer:"consumption"})
-    X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "hour", "day_of_week", "year", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
+    X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "hour", "day_of_week", "year", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12", "production_index"]]
     return Y, X
 
 def analyseDataConsistency(Y):
@@ -86,13 +115,28 @@ training_date_from = pd.Timestamp("2022-01-01 00:00:00")
 training_date_to = pd.Timestamp("2024-07-31 23:00:00")
 forecast_steps = 24*31
 max_threads = 4  # Maximum number of threads to run in parallel
-country = "IT"
+country = "ES"
 
 # STEP 1: LOAD DATA
 consumptions, features, customer_names = loadData(input_data_path, country, training_date_from, training_date_to, date_format="%Y-%m-%d %H:%M:%S")
-customer = customer_names[500]
+customer = customer_names[10]
 
-print(features)
+# Merge production index data into the features dataframe
+if country == "ES":
+    production_index_country = production_index_spain
+elif country == "IT":
+    production_index_country = production_index_italy
+else:
+    raise ValueError("Unsupported country")
+
+# Resample production index to hourly frequency, forward filling values
+production_index_country = production_index_country.set_index("time").resample("H").ffill().reset_index()
+
+# Merge with features dataframe
+features = features.merge(production_index_country[["time", "production_index"]], on="time", how="left")
+
+
+print(features.tail(20))
 
 # STEP 2: CLEAN DATA
 Y, X = getDataForCustomer(customer, consumptions, features)
