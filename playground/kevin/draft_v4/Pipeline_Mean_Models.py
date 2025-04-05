@@ -3,6 +3,7 @@ import pandas as pd
 from os.path import join
 import numpy as np
 import sys
+import matplotlib.pyplot as plt
 
 
 
@@ -209,9 +210,9 @@ for country in ['ES', 'IT']:
         company_pred = np.asarray(region_data[country]["pred"][company_ctr])
         portfolio_sum_true.append(company_true) 
         portfolio_sum_pred.append(company_pred)
-    portfolio_sum_true = np.nanmean(np.asarray(portfolio_sum_true), axis=0)
-    portfolio_sum_pred = np.nanmean(np.asarray(portfolio_sum_pred), axis=0)
-    portfolio_country_error = np.sum(np.nanmean(portfolio_sum_pred-portfolio_sum_true))
+    portfolio_sum_true = np.nansum(np.asarray(portfolio_sum_true), axis=0)
+    portfolio_sum_pred = np.nansum(np.asarray(portfolio_sum_pred), axis=0)
+    portfolio_country_error = np.sum(np.nansum(np.abs(portfolio_sum_pred-portfolio_sum_true)))
     absolute_error[country] = country_error
     portfolio_error[country] = portfolio_country_error
 # Final Forecast Score
@@ -219,5 +220,33 @@ forecast_score = (
     1.0*absolute_error['IT'] + 5.0*absolute_error['ES'] + 
     10.0*portfolio_error['IT'] + 50.0*portfolio_error['ES']
 )
+print(">>", modelType)
 print('The team ' + team_name + ' reached a forecast score of ' +
       str(np.round(forecast_score, 0)))
+
+
+
+
+# VISUALIZATION
+plt.figure(figsize=(12,6))
+ctr = 1
+for country in ['ES', 'IT']:
+    plt.subplot(1,2,ctr)
+    plt.title("Prediction "+country)
+    ctr+=1
+    # Portfolio Country Error
+    portfolio_sum_true = []
+    portfolio_sum_pred = []
+    for company_ctr in range(0, len(region_data[country]["true"])):
+        company_true = np.asarray(region_data[country]["true"][company_ctr])
+        company_pred = np.asarray(region_data[country]["pred"][company_ctr])
+        portfolio_sum_true.append(company_true) 
+        portfolio_sum_pred.append(company_pred)
+        
+    portfolio_sum_true = np.nansum(np.asarray(portfolio_sum_true), axis=0)
+    portfolio_sum_pred = np.nansum(np.asarray(portfolio_sum_pred), axis=0)
+    
+    plt.plot(portfolio_sum_true, label="true")
+    plt.plot(portfolio_sum_pred, label="pred")
+    plt.legend()
+plt.tight_layout()

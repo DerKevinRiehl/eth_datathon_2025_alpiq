@@ -1,0 +1,9 @@
+predicting last two months
+============================
+mean		1895126.0
+hourlymean	1801696.0
+hourlymean7	 745862.0
+============================
+
+
+
