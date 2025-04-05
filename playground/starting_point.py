@@ -1,22 +1,17 @@
 # IMPORTS
 import pandas as pd
-from data import DataLoader
 from os.path import join
 import matplotlib.pyplot as plt
 from statsmodels.tsa.statespace.sarimax import SARIMAX
+import numpy as np
+from concurrent.futures import ProcessPoolExecutor
+import concurrent.futures
+from multiprocessing import Pool
 
 
 
 
-# PARAMETERS
-path = "../../data/1_original/OneDrive_2025-04-05/Alpiq ETHdatathon challenge 2025/datasets2025/"
-countries = ["IT", "ES"]
-country = "IT"
-training_date_from = pd.Timestamp("2022-01-01 00:00:00")
-training_date_to = pd.Timestamp("2022-05-31 23:00:00")
-# training_date_to = pd.Timestamp("2024-07-31 23:00:00")
-
-# LOAD DATA
+# METHODS
 def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S"):
         # LOAD TABLES
     consumptions_path = join(path, "historical_metering_data_" + country + ".csv")
@@ -65,44 +60,68 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
     # Return
     return consumptions, features, customer_names
 
-consumptions, features, customer_names = loadData(path, country, training_date_from, training_date_to, date_format="%Y-%m-%d %H:%M:%S")
+def getDataForCustomer(customer, consumptions, features):
+    Y = consumptions[["time", "VALUEMWHMETERINGDATA_"+customer]]
+    Y = Y.rename(columns={"VALUEMWHMETERINGDATA_"+customer:"consumption"})
+    X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "day_of_week", "year", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
+    return Y, X
 
-# Get Time Series Date For Specific Customer
+def analyseDataConsistency(Y):
+        # Find the first non-NaN value in 'consumption'
+    first_non_nan_index = Y['consumption'].first_valid_index()
+    first_non_nan_date = Y.loc[first_non_nan_index, 'time']
+        # Check if there are any NaN values later in the column
+    has_nan_later = Y['consumption'].isnull().any()
+    return first_non_nan_date, has_nan_later
+
+# PARAMETERS
+input_data_path = "../data/1_original/OneDrive_2025-04-05/Alpiq ETHdatathon challenge 2025/datasets2025/"
+output_data_path = "../data/2_processed/"
+countries = ["IT", "ES"]
+training_date_from = pd.Timestamp("2022-01-01 00:00:00")
+# training_date_to = pd.Timestamp("2022-05-31 23:00:00")
+training_date_to = pd.Timestamp("2024-07-31 23:00:00")
+forecast_steps = 24*31
+max_threads = 4  # Maximum number of threads to run in parallel
+country = "ES"
+
+
+
+
+# STEP 1: LOAD DATA
+consumptions, features, customer_names = loadData(input_data_path, country, training_date_from, training_date_to, date_format="%Y-%m-%d %H:%M:%S")
 customer = customer_names[0]
-Y = consumptions[["time", "total_consumption"]]
-X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "day_of_week", "year", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
 
 
 
-# Determine Daily SARIMAX (24h)
-# Define SARIMAX parameters
-p, d, q = 2, 1, 2   # Non-seasonal parameters (example)
-P, D, Q, s = 1, 1, 1, 24  # Seasonal parameters (24-hour seasonality)
-# Fit SARIMAX model
-model = SARIMAX(Y['total_consumption'],
-                order=(p, d, q),
-                seasonal_order=(P, D, Q, s),
-                enforce_stationarity=False,
-                enforce_invertibility=False)
-model_fit = model.fit(disp=False)
-# Print model summary
-print(model_fit.summary())
+# STEP 2: CLEAN DATA
+Y, X = getDataForCustomer(customer, consumptions, features)
 
-# Forecast next 24 hours (example)
-forecast_steps = 24
-forecast = model_fit.forecast(steps=forecast_steps)
+
+
+
+# STEP 3: TRAIN MODEL
+
+
+  
+# STEP 4: PREDICTION
 forecast_time = pd.date_range(start=training_date_to, periods=forecast_steps + 1, freq='H')[1:]
 Y_forecast = pd.DataFrame({'time': forecast_time})
-Y_forecast["Y"] = forecast.tolist()
+Y_forecast["Y"] = np.mean(Y["consumption"])
 
-# Plot forecast vs original data
+# VISUALIZATION
 plt.figure(figsize=(12, 6))
-plt.plot(Y["time"], Y['total_consumption'], label='Historical Data')
+plt.subplot(2,1,1)
+plt.title("DATA AND PREDICTION")
+plt.plot(Y["time"], Y['consumption'], label='Historical Data')
 plt.plot(Y_forecast["time"], Y_forecast["Y"], label='Forecast', color='red')
-plt.title('SARIMAX Forecast')
 plt.xlabel('Time')
 plt.ylabel('Consumption')
 plt.legend()
-plt.show()
+plt.subplot(2,1,2)
+plt.title("RESIDUAL ERROR OF MODEL")
+plt.xlabel('Time')
 
-
+plt.tight_layout()
+ 
+ 
