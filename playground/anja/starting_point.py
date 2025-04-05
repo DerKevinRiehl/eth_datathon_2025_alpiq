@@ -8,6 +8,8 @@ from concurrent.futures import ProcessPoolExecutor
 import concurrent.futures
 from multiprocessing import Pool
 from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import HistGradientBoostingRegressor
+import seaborn as sns 
 
 
 
@@ -83,16 +85,21 @@ training_date_from = pd.Timestamp("2022-01-01 00:00:00")
 training_date_to = pd.Timestamp("2024-07-31 23:00:00")
 forecast_steps = 24*31
 max_threads = 4  # Maximum number of threads to run in parallel
-country = "ES"
+country = "IT"
 
 # STEP 1: LOAD DATA
 consumptions, features, customer_names = loadData(input_data_path, country, training_date_from, training_date_to, date_format="%Y-%m-%d %H:%M:%S")
-customer = customer_names[4]
-
-
+customer = customer_names[500]
 
 # STEP 2: CLEAN DATA
 Y, X = getDataForCustomer(customer, consumptions, features)
+
+X = X.fillna(0)
+Y = Y.fillna(0)
+
+first_idx = X.first_valid_index()
+X = X.loc[first_idx:]
+Y = Y.loc[first_idx:]
 
 # STEP 3: TRAIN MODEL
 
@@ -104,23 +111,38 @@ X_test = X.iloc[train_test_split:]
 y_train = Y.iloc[:train_test_split]
 y_test = Y.iloc[train_test_split:]
 
-print(X.columns)
+#reg = LinearRegression().fit(X_train.drop('time',axis = 1),y_train['consumption'])
+#reg_small = LinearRegression().fit(X_train.drop(['time', 'month'],axis = 1),y_train['consumption'])
+grad_boost = HistGradientBoostingRegressor().fit(X_train.drop(['time', 'month'],axis = 1),y_train['consumption'])
 
-reg = LinearRegression().fit(X_train.drop('time',axis = 1),y_train['consumption'])
-reg_small = LinearRegression().fit(X_train.drop(['time', 'month'],axis = 1),y_train['consumption'])
-pred = reg.predict(X_test.drop('time',axis = 1))
-pred_small = reg_small.predict(X_test.drop(['time', 'month'],axis = 1))
+#pred = reg.predict(X_test.drop('time',axis = 1))
+#pred_small = reg_small.predict(X_test.drop(['time', 'month'],axis = 1))
+pred_grad_boost = grad_boost.predict(X_test.drop(['time', 'month'],axis = 1))
 
 pred_mean = [y_train['consumption'].mean()] * len(y_test)
-  
+   
 # STEP 4: PREDICTION
 forecast_time = pd.date_range(start=training_date_to, periods=forecast_steps + 1, freq='H')[1:]
 Y_forecast = pd.DataFrame({'time': forecast_time})
 Y_forecast["Y"] = np.mean(Y["consumption"])
 
-print('Error reg: ' + str((y_test['consumption'] - pred).abs().sum()))
-print('Error reg small: ' + str((y_test['consumption'] - pred_small).abs().sum()))
+#print('Error reg small: ' + str((y_test['consumption'] - pred_small).abs().sum()))
 print('Error mean: ' + str((y_test['consumption'] - pred_mean).abs().sum()))
+print('Error gradient boosting: ' + str((y_test['consumption'] - pred_grad_boost).abs().sum()))
 print('Total test volume: ' + str(y_test['consumption'].sum()))
- 
+
+Y['train_test'] = (Y.index >= train_test_split)
+
+extended_pred = pd.DataFrame({'train_test': Y['train_test'].values, 'consumption': pd.concat([y_train['consumption'], pd.Series(pred_grad_boost)]).values})
+extended_mean = pd.DataFrame({'train_test': Y['train_test'].values, 'consumption': pd.concat([y_train['consumption'], pd.Series(pred_mean)]).values})
+
+fig, ax = plt.subplots(1,1,figsize = (30,4))
+sns.lineplot(Y, x = Y.index, y = 'consumption')
+sns.lineplot(extended_pred, x = extended_pred.index, y = 'consumption', hue='train_test', palette={True: 'red', False: 'blue'})
+
+# Enable interactive mode
+plt.ion()
+
+# Show the plot
+plt.show(block=True)
  
