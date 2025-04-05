@@ -68,6 +68,13 @@ def getDataForCustomer(customer, consumptions, features):
     X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "day_of_week", "year", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
     return Y, X
 
+def getDataForPortfolio(consumptions, features):
+
+    Y = consumptions[["time", "VALUEMWHMETERINGDATA_"+customer]]
+    Y = Y.rename(columns={"VALUEMWHMETERINGDATA_"+customer:"consumption"})
+    X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "day_of_week", "year", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
+    return None
+
 def analyseDataConsistency(Y):
         # Find the first non-NaN value in 'consumption'
     first_non_nan_index = Y['consumption'].first_valid_index()
@@ -90,6 +97,8 @@ country = "IT"
 # STEP 1: LOAD DATA
 consumptions, features, customer_names = loadData(input_data_path, country, training_date_from, training_date_to, date_format="%Y-%m-%d %H:%M:%S")
 customer = customer_names[500]
+
+print(consumptions)
 
 # STEP 2: CLEAN DATA
 Y, X = getDataForCustomer(customer, consumptions, features)
