@@ -9,8 +9,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from sklearn.ensemble import HistGradientBoostingRegressor
-
-
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
 
 
@@ -53,6 +52,7 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
     df_oil = pd.read_csv(input_data_path2+"oil_prices_open.csv")
     df_oil['date'] = pd.to_datetime(df_oil['Date'])
     df_oil = df_oil[["date", "OilOpen"]]
+    df_oil['date'] = pd.to_datetime(df_oil['date']).dt.tz_localize(None)
     df_msci = pd.read_csv(input_data_path3+"MSCI_"+country+".csv", sep=",")
     if country == "ES":
         df_msci = pd.read_csv(input_data_path3+"MSCI_"+country+".csv", sep=";")
@@ -64,6 +64,7 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
         df_msci['date'] = pd.to_datetime(df_msci['Date'])
         df_msci = df_msci[["date", "Close"]]
         df_msci = df_msci.rename(columns={"Close":"MSCI_national"})
+    df_msci['date'] = pd.to_datetime(df_msci['date']).dt.tz_localize(None)
     # Create binary variables for each day of the week (1-7)
     for day in range(1, 8):
         features3[f'day_{day}'] = (features3['time'].dt.dayofweek + 1 == day).astype(int)
@@ -135,7 +136,7 @@ def doForecast_HOURLYMEAN7(weekly_hourly_means):
     Y_forecast['consumption'] = Y_forecast.apply(lambda row: weekly_hourly_means[row['day_of_week'], row['hour']], axis=1)
     return Y_forecast 
 
-def trainModel_HOURLYMEAN7_GB(X_train, Y_train):
+def trainModel_HOURLYMEAN7_GB(X_train, Y_train, customer):
     def getResiduals_HourlyMean7(Y_train):
         weekly_hourly_means = trainModel(Y_train, X_train, modelType="hourlymean7")
         Y_fitted = Y_train.copy()
@@ -151,7 +152,7 @@ def trainModel_HOURLYMEAN7_GB(X_train, Y_train):
     grad_boost = HistGradientBoostingRegressor().fit(X_train, residuals_train["residual"])
     return [grad_boost, weekly_hourly_means]
     
-def doForecast_HOURLYMEAN7_GB(model, X_test):
+def doForecast_HOURLYMEAN7_GB(model, X_test, customer):
     grad_boost = model[0]
     weekly_hourly_means = model[1]
     X_test_sub  = X_test [["spv", "temp", "day_nr_inc", "is_holiday", "is_weekend", "month", "day_of_week", "hour", "INITIALROLLOUTVALUE_"+customer], "OilOpen", "MSCI_national",]
@@ -180,7 +181,29 @@ def doForecast_GRADBOOST(gradboost, X):
     Y_forecast['consumption'] = pred_grad_boost
     return Y_forecast
 
-def trainModel(Y, X, modelType):
+def trainModel_EXPSMOOTH(X,Y, customer):
+    # X = X.fillna(0)
+    # Y = Y.fillna(0)
+    X = X[["spv", "temp", "day_nr_inc", "is_holiday", "is_weekend", "month", "day_of_week", "hour", "INITIALROLLOUTVALUE_"+customer, "OilOpen", "MSCI_national"]]
+    model = ExponentialSmoothing(
+        Y["consumption"],  # Target variable for training
+        seasonal_periods=24*7*2,  # Example: monthly data with yearly seasonality
+        trend="add",          # Additive trend
+        seasonal="add",       # Additive seasonality
+        initialization_method="estimated"  # Automatically estimate initial values
+    ).fit()
+    return model
+
+def doForecast_EXPSMOOTH(model, X, customer):
+    # X = X.fillna(0)
+    X = X[["spv", "temp", "day_nr_inc", "is_holiday", "is_weekend", "month", "day_of_week", "hour", "INITIALROLLOUTVALUE_"+customer, "OilOpen", "MSCI_national"]]
+    forecast = model.forecast(steps=len(X))
+    forecast_time = pd.date_range(start=testing_date_range[0], end=testing_date_range[1], freq='H')
+    Y_forecast = pd.DataFrame({'time': forecast_time})
+    Y_forecast['consumption'] = forecast
+    return Y_forecast
+
+def trainModel(Y, X, customer, modelType):
     if modelType=="mean":
         model = trainModel_MEAN(Y)
     elif modelType=="hourlymean":
@@ -190,13 +213,15 @@ def trainModel(Y, X, modelType):
     elif modelType=="gradboost":
         model = trainModel_GRADBOOST(X, Y)
     elif modelType=="hourlymean7_gb":
-        model = trainModel_HOURLYMEAN7_GB(X, Y)
+        model = trainModel_HOURLYMEAN7_GB(X, Y, customer)
+    elif modelType=="expsmooth":
+        model = trainModel_EXPSMOOTH(X, Y, customer)
     else:
         print("ERR UNKNOWN MODEL ", modelType)
         sys.exit(0)
     return model
 
-def doForecast(model, modelType, X):
+def doForecast(model, modelType, X, customer):
     if modelType=="mean":
         Y_forecast = doForecast_MEAN(model)
     elif modelType=="hourlymean":
@@ -206,7 +231,9 @@ def doForecast(model, modelType, X):
     elif modelType=="gradboost":
         Y_forecast = doForecast_GRADBOOST(model, X)
     elif modelType=="hourlymean7_gb":
-        Y_forecast = doForecast_HOURLYMEAN7_GB(model, X)
+        Y_forecast = doForecast_HOURLYMEAN7_GB(model, X, customer)
+    elif modelType=="expsmooth":
+        Y_forecast = doForecast_EXPSMOOTH(model, X, customer)
     else:
         print("ERR UNKNOWN MODEL ", modelType)
         sys.exit(0)
@@ -233,13 +260,70 @@ testing_date_range = [pd.Timestamp("2024-06-01 00:00:00"), pd.Timestamp("2024-07
 forecast_steps = 24*31
 max_threads = 4  # Maximum number of threads to run in parallel
 country = "ES"
-model_types = ["mean", "hourlymean", "hourlymean7", "hourlymean7_gb", "gradboost"]
-model_types_nonan = ["hourlymean7_gb", "gradboost"]
-modelType = "hourlymean7"
+model_types = ["mean", "hourlymean", "hourlymean7", "hourlymean7_gb", "gradboost", "expsmooth"]
+model_types_nonan = ["hourlymean7_gb", "gradboost", "expsmooth"]
+modelType = "expsmooth"
 
 
-
+"""
 consumptions, features, customer_names = loadData(input_data_path, country, training_date_from, training_date_to, date_format="%Y-%m-%d %H:%M:%S")
+
+
+customer = customer_names[0]
+
+
+Y, X = getDataForCustomer(customer, consumptions, features)
+
+Y_train = Y.copy()
+Y_test = Y.copy()
+
+X_train = X.copy()
+X_test = X.copy()
+
+Y_train = Y_train[(Y_train["time"] >= training_date_range[0]) & (Y_train["time"] <= training_date_range[1])]
+Y_test = Y_test[(Y_test["time"] >= testing_date_range[0]) & (Y_test["time"] <= testing_date_range[1])]
+X_train = X_train[(X_train["time"] >= training_date_range[0]) & (X_train["time"] <= training_date_range[1])]
+X_test = X_test[(X_test["time"] >= testing_date_range[0]) & (X_test["time"] <= testing_date_range[1])]
+Y_train = Y_train.reset_index()
+Y_test = Y_test.reset_index()
+X_train = X_train.reset_index()
+X_test = X_test.reset_index()
+
+
+
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
+
+X_train = X_train[["spv", "temp", "day_nr_inc", "is_holiday", "is_weekend", "month", "day_of_week", "hour", "INITIALROLLOUTVALUE_"+customer, "OilOpen", "MSCI_national"]]
+X_test  = X_test [["spv", "temp", "day_nr_inc", "is_holiday", "is_weekend", "month", "day_of_week", "hour", "INITIALROLLOUTVALUE_"+customer, "OilOpen", "MSCI_national"]]
+
+model = ExponentialSmoothing(
+    Y_train["consumption"],  # Target variable for training
+    seasonal_periods=24*7*2,  # Example: monthly data with yearly seasonality
+    trend="add",          # Additive trend
+    seasonal="add",       # Additive seasonality
+    initialization_method="estimated"  # Automatically estimate initial values
+).fit()
+
+# Forecast for the test period length
+forecast = model.forecast(steps=len(Y_test["consumption"]))
+
+# Evaluate the model using Mean Absolute Percentage Error (MAPE)
+from sklearn.metrics import mean_absolute_percentage_error
+
+mape = mean_absolute_percentage_error(Y_test["consumption"], forecast)
+print(f"Mean Absolute Percentage Error: {mape:.2f}")
+
+# Optionally, visualize the results
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(10, 6))
+plt.plot(Y_train["time"], Y_train["consumption"], label="Training Data")
+plt.plot(Y_test["time"], Y_test["consumption"], label="Actual Test Data")
+plt.plot(Y_test["time"], forecast, label="Forecast")
+plt.legend()
+plt.show()
+"""
+
 
 
 
@@ -357,9 +441,9 @@ for country in ["IT", "ES"]:
         X_train = X_train.reset_index()
         X_test = X_test.reset_index()
         # Train Model
-        model = trainModel(Y_train, X_train, modelType)
+        model = trainModel(Y_train, X_train, customer, modelType)
         # STEP 4: PREDICTION
-        Y_forecast = doForecast(model, modelType, X_test)
+        Y_forecast = doForecast(model, modelType, X_test, customer)
         # Store Results
         region_true.append(Y_test["consumption"].tolist())
         region_pred.append(Y_forecast["consumption"].tolist())
