@@ -85,7 +85,7 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
 def getDataForCustomer(customer, consumptions, features):
     Y = consumptions[["time", "VALUEMWHMETERINGDATA_"+customer]]
     Y = Y.rename(columns={"VALUEMWHMETERINGDATA_"+customer:"consumption"})
-    X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "day_of_week", "year", "hour", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
+    X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "day_of_week", "year", "hour", "OilOpen", "MSCI_national", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
     return Y, X
 
 def logResiduals(residuals, output_data_path, customer, Y_train):
@@ -147,14 +147,14 @@ def trainModel_HOURLYMEAN7_GB(X_train, Y_train):
         residuals_train = residuals_train[["time", "residual"]]
         return residuals_train, Y_fitted, weekly_hourly_means
     residuals_train, Y_fitted, weekly_hourly_means = getResiduals_HourlyMean7(Y_train)
-    X_train = X_train[["spv", "temp", "day_nr_inc", "is_holiday", "is_weekend", "month", "day_of_week", "hour", "INITIALROLLOUTVALUE_"+customer]]
+    X_train = X_train[["spv", "temp", "day_nr_inc", "is_holiday", "is_weekend", "month", "day_of_week", "hour", "INITIALROLLOUTVALUE_"+customer], "OilOpen", "MSCI_national",]
     grad_boost = HistGradientBoostingRegressor().fit(X_train, residuals_train["residual"])
     return [grad_boost, weekly_hourly_means]
     
 def doForecast_HOURLYMEAN7_GB(model, X_test):
     grad_boost = model[0]
     weekly_hourly_means = model[1]
-    X_test_sub  = X_test [["spv", "temp", "day_nr_inc", "is_holiday", "is_weekend", "month", "day_of_week", "hour", "INITIALROLLOUTVALUE_"+customer]]
+    X_test_sub  = X_test [["spv", "temp", "day_nr_inc", "is_holiday", "is_weekend", "month", "day_of_week", "hour", "INITIALROLLOUTVALUE_"+customer], "OilOpen", "MSCI_national",]
     forecast_time = pd.date_range(start=testing_date_range[0], end=testing_date_range[1], freq='H')
     Y_forecast = pd.DataFrame({'time': forecast_time})
     Y_forecast['day_of_week'] = Y_forecast['time'].dt.dayofweek
@@ -243,9 +243,6 @@ consumptions, features, customer_names = loadData(input_data_path, country, trai
 
 
 
-
-import sys
-sys.exit(0)
 
 
 """
