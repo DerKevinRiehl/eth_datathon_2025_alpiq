@@ -13,6 +13,8 @@ from sklearn.ensemble import HistGradientBoostingRegressor
 
 
 
+
+
 # METHODS
 def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S"):
         # LOAD TABLES
@@ -47,6 +49,21 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
     features3['day_of_week'] = features3['time'].dt.dayofweek + 1
     features3['year'] = features3['time'].dt.year
     features3['hour'] = features3['time'].dt.hour
+        # ECONOMIC DATA
+    df_oil = pd.read_csv(input_data_path2+"oil_prices_open.csv")
+    df_oil['date'] = pd.to_datetime(df_oil['Date'])
+    df_oil = df_oil[["date", "OilOpen"]]
+    df_msci = pd.read_csv(input_data_path3+"MSCI_"+country+".csv", sep=",")
+    if country == "ES":
+        df_msci = pd.read_csv(input_data_path3+"MSCI_"+country+".csv", sep=";")
+        df_msci['date'] = pd.to_datetime(df_msci['Date'])
+        df_msci = df_msci[["date", "Open"]]
+        df_msci = df_msci.rename(columns={"Open":"MSCI_national"})
+    else:
+        df_msci = pd.read_csv(input_data_path3+"MSCI_"+country+".csv", sep=",")
+        df_msci['date'] = pd.to_datetime(df_msci['Date'])
+        df_msci = df_msci[["date", "Close"]]
+        df_msci = df_msci.rename(columns={"Close":"MSCI_national"})
     # Create binary variables for each day of the week (1-7)
     for day in range(1, 8):
         features3[f'day_{day}'] = (features3['time'].dt.dayofweek + 1 == day).astype(int)
@@ -55,6 +72,8 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
         features3[f'month_{month}'] = (features3['time'].dt.month == month).astype(int)
     # CREATE FINAL FEATURE DATASET
     features = features.merge(features2, on="time", how="left").merge(features3, on="time", how="left")
+    features['date'] = pd.to_datetime(features['time']).dt.normalize()
+    features = features.merge(df_oil, on="date", how="left").merge(df_msci, on="date", how="left")
     # DETERMINE CUSTOMERS
     customer_names = []
     for column_name in consumptions.columns:
@@ -198,6 +217,9 @@ def doForecast(model, modelType, X):
 
 # PARAMETERS
 input_data_path = "../../../data/1_original/OneDrive_2025-04-05/Alpiq ETHdatathon challenge 2025/datasets2025/"
+input_data_path2 = "../../../data/1_original/Alex/"
+input_data_path3 = "../../../data/1_original/Kev/"
+
 output_data_path = "../../../data/2_processed/"
 countries = ["IT", "ES"]
 training_date_from = pd.Timestamp("2022-01-01 00:00:00")
@@ -213,11 +235,17 @@ max_threads = 4  # Maximum number of threads to run in parallel
 country = "ES"
 model_types = ["mean", "hourlymean", "hourlymean7", "hourlymean7_gb", "gradboost"]
 model_types_nonan = ["hourlymean7_gb", "gradboost"]
-modelType = "hourlymean7_gb"
+modelType = "hourlymean7"
+
+
+
+consumptions, features, customer_names = loadData(input_data_path, country, training_date_from, training_date_to, date_format="%Y-%m-%d %H:%M:%S")
 
 
 
 
+import sys
+sys.exit(0)
 
 
 """
