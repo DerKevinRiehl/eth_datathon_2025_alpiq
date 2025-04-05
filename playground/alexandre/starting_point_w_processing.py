@@ -8,9 +8,13 @@ from concurrent.futures import ProcessPoolExecutor
 import concurrent.futures
 from multiprocessing import Pool
 from sklearn.linear_model import LinearRegression
-from sklearn.kernel_ridge import KernelRidge
+from sklearn.ensemble import HistGradientBoostingRegressor
+import seaborn as sns 
+import sys
 
-
+# Add the preprocessing module to the Python path
+sys.path.append("../alexandre/")
+from preprocessing import process_time_series
 
 # METHODS
 def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S"):
@@ -45,6 +49,7 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
     features3['week'] = features3['time'].dt.isocalendar().week
     features3['day_of_week'] = features3['time'].dt.dayofweek + 1
     features3['year'] = features3['time'].dt.year
+    features3['hour'] = features3['time'].dt.hour
     # Create binary variables for each day of the week (1-7)
     for day in range(1, 8):
         features3[f'day_{day}'] = (features3['time'].dt.dayofweek + 1 == day).astype(int)
@@ -64,7 +69,7 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
 def getDataForCustomer(customer, consumptions, features):
     Y = consumptions[["time", "VALUEMWHMETERINGDATA_"+customer]]
     Y = Y.rename(columns={"VALUEMWHMETERINGDATA_"+customer:"consumption"})
-    X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "day_of_week", "year", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
+    X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "hour", "day_of_week", "year", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
     return Y, X
 
 def analyseDataConsistency(Y):
@@ -88,46 +93,67 @@ country = "ES"
 
 # STEP 1: LOAD DATA
 consumptions, features, customer_names = loadData(input_data_path, country, training_date_from, training_date_to, date_format="%Y-%m-%d %H:%M:%S")
-customer = customer_names[4]
+customer = customer_names[15]
 
-
+#print(features)
 
 # STEP 2: CLEAN DATA
 Y, X = getDataForCustomer(customer, consumptions, features)
+
+#X = X.fillna(0)
+
+# Preprocessing
+#Y = Y.rename(columns={"time": "DATETIME"})
+print(Y.head(5))
+Y = process_time_series(Y)
+print(Y.head(5))
+
+
+first_idx = X.first_valid_index()
+X = X.loc[first_idx:]
+Y = Y.loc[first_idx:]
 
 # STEP 3: TRAIN MODEL
 
 train_test_split = 21885
 
-# Split the data into training and testing sets
 X_train = X.iloc[:train_test_split]
 X_test = X.iloc[train_test_split:]
 
 y_train = Y.iloc[:train_test_split]
 y_test = Y.iloc[train_test_split:]
 
-print(X.columns)
+#reg = LinearRegression().fit(X_train.drop('time',axis = 1),y_train['consumption'])
+#reg_small = LinearRegression().fit(X_train.drop(['time', 'month'],axis = 1),y_train['consumption'])
+grad_boost = HistGradientBoostingRegressor().fit(X_train.drop(['time', 'month'],axis = 1),y_train['consumption'])
 
-# Train Kernel Ridge Regression models
-kernel_ridge_reg = KernelRidge(alpha=1.0, kernel='rbf', gamma=1.0).fit(X_train.drop('time', axis=1), y_train['consumption'])
-kernel_ridge_reg_small = KernelRidge(alpha=1.0, kernel='rbf', gamma=1.0).fit(X_train.drop(['time', 'month'], axis=1), y_train['consumption'])
+#pred = reg.predict(X_test.drop('time',axis = 1))
+#pred_small = reg_small.predict(X_test.drop(['time', 'month'],axis = 1))
+pred_grad_boost = grad_boost.predict(X_test.drop(['time', 'month'],axis = 1))
 
-# Make predictions
-pred = kernel_ridge_reg.predict(X_test.drop('time', axis=1))
-pred_small = kernel_ridge_reg_small.predict(X_test.drop(['time', 'month'], axis=1))
-
-# Baseline prediction using the mean of the training data
 pred_mean = [y_train['consumption'].mean()] * len(y_test)
-
+   
 # STEP 4: PREDICTION
 forecast_time = pd.date_range(start=training_date_to, periods=forecast_steps + 1, freq='H')[1:]
 Y_forecast = pd.DataFrame({'time': forecast_time})
-Y_forecast["Y"] = y_train['consumption'].mean()
+Y_forecast["Y"] = np.mean(Y["consumption"])
 
-# Print errors
-print('Error reg: ' + str((y_test['consumption'] - pred).abs().sum()))
-print('Error reg small: ' + str((y_test['consumption'] - pred_small).abs().sum()))
+#print('Error reg small: ' + str((y_test['consumption'] - pred_small).abs().sum()))
 print('Error mean: ' + str((y_test['consumption'] - pred_mean).abs().sum()))
+print('Error gradient boosting: ' + str((y_test['consumption'] - pred_grad_boost).abs().sum()))
 print('Total test volume: ' + str(y_test['consumption'].sum()))
 
-    
+Y['train_test'] = (Y.index >= train_test_split)
+
+extended_pred = pd.DataFrame({'train_test': Y['train_test'].values, 'consumption': pd.concat([y_train['consumption'], pd.Series(pred_grad_boost)]).values})
+extended_mean = pd.DataFrame({'train_test': Y['train_test'].values, 'consumption': pd.concat([y_train['consumption'], pd.Series(pred_mean)]).values})
+
+fig, ax = plt.subplots(1,1,figsize = (30,4))
+sns.lineplot(Y, x = Y.index, y = 'consumption')
+sns.lineplot(extended_pred, x = extended_pred.index, y = 'consumption', hue='train_test', palette={True: 'red', False: 'blue'})
+
+# Enable interactive mode
+plt.ion()
+
+# Show the plot
+plt.show(block=True)
