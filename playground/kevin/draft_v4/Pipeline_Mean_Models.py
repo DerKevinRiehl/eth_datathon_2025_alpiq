@@ -5,7 +5,8 @@ import numpy as np
 import sys
 import matplotlib.pyplot as plt
 from sklearn.ensemble import HistGradientBoostingRegressor
-
+from keras.models import Sequential
+from keras.layers import LSTM, Dense
 
 # METHODS
 def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S"):
@@ -40,6 +41,7 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
     features3['week'] = features3['time'].dt.isocalendar().week
     features3['day_of_week'] = features3['time'].dt.dayofweek + 1
     features3['year'] = features3['time'].dt.year
+    features3['hour'] = features3['time'].dt.hour
     # Create binary variables for each day of the week (1-7)
     for day in range(1, 8):
         features3[f'day_{day}'] = (features3['time'].dt.dayofweek + 1 == day).astype(int)
@@ -59,7 +61,7 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
 def getDataForCustomer(customer, consumptions, features):
     Y = consumptions[["time", "VALUEMWHMETERINGDATA_"+customer]]
     Y = Y.rename(columns={"VALUEMWHMETERINGDATA_"+customer:"consumption"})
-    X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "day_of_week", "year", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
+    X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "day_of_week", "year", "hour", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
     return Y, X
 
 def logResiduals(residuals, output_data_path, customer, Y_train):
@@ -111,14 +113,14 @@ def doForecast_HOURLYMEAN7(weekly_hourly_means):
 
 def trainModel_GRADBOOST(X,Y):
 
-    X = X.fillna(0)
+    #X = X.fillna(0)
     Y = Y.fillna(0)
     grad_boost = HistGradientBoostingRegressor().fit(X.drop(['time', 'month'],axis = 1),Y['consumption'])
     return grad_boost
 
 def doForecast_GRADBOOST(X,gradboost):
 
-    X = X.fillna(0)
+    #X = X.fillna(0)
     pred_grad_boost = gradboost.predict(X.drop(['time', 'month'],axis = 1))
 
     forecast_time = pd.date_range(start=testing_date_range[0], end=testing_date_range[1], freq='H')
@@ -127,6 +129,21 @@ def doForecast_GRADBOOST(X,gradboost):
     Y_forecast['hour'] = Y_forecast['time'].dt.hour
     Y_forecast['consumption'] = pred_grad_boost
     return Y_forecast
+
+def trainModel_LSTM(X,Y):
+
+    model = Sequential()
+    model.add(LSTM(units=50, input_shape=(len(X), len(X.columns))))
+    model.add(Dense(units=1))  # Single output for regression, change units for classification
+    model.compile(optimizer='adam', loss='mean_squared_error')
+    model.fit(Y, Y, epochs=10, batch_size=1)
+    return None
+
+def doForecast_LSTM(X,LSTM):
+
+    output = LSTM(X)
+
+    return None
 
 def trainModel(X, Y, modelType):
     if modelType=="mean":
@@ -192,6 +209,12 @@ for country in ["IT", "ES"]:
         print(country, customer)
         # STEP 2: CLEAN DATA
         Y, X = getDataForCustomer(customer, consumptions, features)
+
+        # Trim time series until first non-NA
+        first_idx = Y.first_valid_index()
+        X = X.loc[first_idx:]
+        Y = Y.loc[first_idx:]
+
         # STEP 3: TRAIN MODEL
         Y_train = Y.copy()
         Y_test = Y.copy()

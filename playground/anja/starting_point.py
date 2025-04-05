@@ -46,6 +46,7 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
     features3['week'] = features3['time'].dt.isocalendar().week
     features3['day_of_week'] = features3['time'].dt.dayofweek + 1
     features3['year'] = features3['time'].dt.year
+    features3['hour'] = features3['time'].dt.hour
     # Create binary variables for each day of the week (1-7)
     for day in range(1, 8):
         features3[f'day_{day}'] = (features3['time'].dt.dayofweek + 1 == day).astype(int)
@@ -65,7 +66,7 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
 def getDataForCustomer(customer, consumptions, features):
     Y = consumptions[["time", "VALUEMWHMETERINGDATA_"+customer]]
     Y = Y.rename(columns={"VALUEMWHMETERINGDATA_"+customer:"consumption"})
-    X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "day_of_week", "year", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
+    X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "hour", "day_of_week", "year", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
     return Y, X
 
 def analyseDataConsistency(Y):
@@ -89,14 +90,14 @@ country = "IT"
 
 # STEP 1: LOAD DATA
 consumptions, features, customer_names = loadData(input_data_path, country, training_date_from, training_date_to, date_format="%Y-%m-%d %H:%M:%S")
-customer = customer_names[502]
+customer = customer_names[500]
 
 print(features)
 
 # STEP 2: CLEAN DATA
 Y, X = getDataForCustomer(customer, consumptions, features)
 
-X = X.fillna(0)
+#X = X.fillna(0)
 Y = Y.fillna(0)
 
 first_idx = X.first_valid_index()
