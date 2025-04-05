@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-def process_time_series(file_path, column_index):
+def process_time_series(data):
     """
     Process a time series dataset by handling NaNs and outliers with interpolation.
     Parameters:
@@ -11,20 +11,18 @@ def process_time_series(file_path, column_index):
     Returns:
         pd.DataFrame: DataFrame containing the original and cleaned time series.
     """
-    # Load the dataset
-    data = pd.read_csv(file_path)
-
-    # Extract the desired column(s)
-    selected_columns = data.iloc[:, [0, column_index]]  # Extract DATETIME and the specified column
 
     # Find the first non-NaN index in the selected column
-    first_non_nan_index = selected_columns.iloc[:, 1].first_valid_index()
+    first_non_nan_index = data.iloc[:, 1].first_valid_index()
 
     # Trim the DataFrame to start from the first non-NaN value
-    trimmed_columns = selected_columns.loc[first_non_nan_index:].reset_index(drop=True)
+    trimmed_columns = data.loc[first_non_nan_index:].reset_index(drop=True)
 
     # Convert the DATETIME column to pandas datetime format
     trimmed_columns.iloc[:, 0] = pd.to_datetime(trimmed_columns.iloc[:, 0], errors='coerce')
+
+    # Rename the first column to 'DATETIME'
+    trimmed_columns.rename(columns={trimmed_columns.columns[0]: 'DATETIME'}, inplace=True)
 
     # Perform interpolation to fill NaN values
     trimmed_columns.iloc[:, 1] = trimmed_columns.iloc[:, 1].interpolate(method='linear')
