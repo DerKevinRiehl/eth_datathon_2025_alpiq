@@ -4,8 +4,7 @@ from os.path import join
 import numpy as np
 import sys
 import matplotlib.pyplot as plt
-
-
+from sklearn.ensemble import HistGradientBoostingRegressor
 
 
 # METHODS
@@ -110,25 +109,48 @@ def doForecast_HOURLYMEAN7(weekly_hourly_means):
     Y_forecast['consumption'] = Y_forecast.apply(lambda row: weekly_hourly_means[row['day_of_week'], row['hour']], axis=1)
     return Y_forecast 
 
-def trainModel(Y, modelType):
+def trainModel_GRADBOOST(X,Y):
+
+    X = X.fillna(0)
+    Y = Y.fillna(0)
+    grad_boost = HistGradientBoostingRegressor().fit(X.drop(['time', 'month'],axis = 1),Y['consumption'])
+    return grad_boost
+
+def doForecast_GRADBOOST(X,gradboost):
+
+    X = X.fillna(0)
+    pred_grad_boost = gradboost.predict(X.drop(['time', 'month'],axis = 1))
+
+    forecast_time = pd.date_range(start=testing_date_range[0], end=testing_date_range[1], freq='H')
+    Y_forecast = pd.DataFrame({'time': forecast_time})
+    Y_forecast['day_of_week'] = Y_forecast['time'].dt.dayofweek
+    Y_forecast['hour'] = Y_forecast['time'].dt.hour
+    Y_forecast['consumption'] = pred_grad_boost
+    return Y_forecast
+
+def trainModel(X, Y, modelType):
     if modelType=="mean":
         model = trainModel_MEAN(Y)
     elif modelType=="hourlymean":
         model = trainModel_HOURLYMEAN(Y)
     elif modelType=="hourlymean7":
         model = trainModel_HOURLYMEAN7(Y)
+    elif modelType=='gradboost':
+        model = trainModel_GRADBOOST(X,Y)
     else:
         print("ERR UNKNOWN MODEL ", modelType)
         sys.exit(0)
     return model
 
-def doForecast(model, modelType):
+def doForecast(X, model, modelType):
     if modelType=="mean":
         Y_forecast = doForecast_MEAN(model)
     elif modelType=="hourlymean":
         Y_forecast = doForecast_HOURLYMEAN(model)
     elif modelType=="hourlymean7":
         Y_forecast = doForecast_HOURLYMEAN7(model)
+    elif modelType=='gradboost':
+        Y_forecast = doForecast_GRADBOOST(X,model)
     else:
         print("ERR UNKNOWN MODEL ", modelType)
         sys.exit(0)
@@ -152,8 +174,8 @@ testing_date_range = [pd.Timestamp("2024-06-01 00:00:00"), pd.Timestamp("2024-07
 forecast_steps = 24*31
 max_threads = 4  # Maximum number of threads to run in parallel
 country = "IT"
-model_types = ["mean", "hourlymean", "hourlymean7"]
-modelType = "hourlymean7"
+model_types = ["mean", "hourlymean", "hourlymean7", "gradboost"]
+modelType = "gradboost"
 
 
 
@@ -177,10 +199,17 @@ for country in ["IT", "ES"]:
         Y_test = Y_test[(Y_test["time"] >= testing_date_range[0]) & (Y_test["time"] <= testing_date_range[1])]
         Y_train = Y_train.reset_index()
         Y_test = Y_test.reset_index()
+
+        X_train = X.copy()
+        X_test = X.copy()
+        X_train = X_train[(X_train["time"] >= training_date_range[0]) & (X_train["time"] <= training_date_range[1])]
+        X_test = X_test[(X_test["time"] >= testing_date_range[0]) & (X_test["time"] <= testing_date_range[1])]
+        X_train = X_train.reset_index()
+        X_test = X_test.reset_index()
         # Train Model
-        model = trainModel(Y_train, modelType)
+        model = trainModel(X_train, Y_train, modelType)
         # STEP 4: PREDICTION
-        Y_forecast = doForecast(model, modelType)
+        Y_forecast = doForecast(X_test, model, modelType)
         # Store Results
         region_true.append(Y_test["consumption"].tolist())
         region_pred.append(Y_forecast["consumption"].tolist())
