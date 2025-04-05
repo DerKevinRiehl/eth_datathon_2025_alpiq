@@ -45,10 +45,10 @@ def process_time_series(data):
     print(f"Number of outliers detected: {num_outliers}")
 
     # Replace detected outliers with NaN
-    trimmed_columns['cleaned_values'] = trimmed_columns.iloc[:, 1].where(~outlier_mask, np.nan)
+    trimmed_columns['consumption'] = trimmed_columns.iloc[:, 1].where(~outlier_mask, np.nan)
 
     # Interpolate to replace outliers with interpolated values
-    trimmed_columns['cleaned_values'] = trimmed_columns['cleaned_values'].interpolate(method='linear')
+    trimmed_columns['consumption'] = trimmed_columns['consumption'].interpolate(method='linear')
 
     # Return only the cleaned column
-    return trimmed_columns[['DATETIME', 'cleaned_values']]
+    return trimmed_columns[['DATETIME', 'consumption']]
