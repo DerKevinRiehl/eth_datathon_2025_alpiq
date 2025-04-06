@@ -32,11 +32,13 @@ First, we developed baseline models that serve as a benchmark, where *Hourly Mea
 
 Next, we tried two approaches based on Machine Learning.
 - Hybrid approaches, where we try to explain residuals of *Hourly Mean 7* with machine learning models.
+  - Combination *Hourly Mean 7* and learn residuals with *Gradient Boosting*
 - Complete approaches, where we learn from the time series directly with machine learning models.
   - Gradient Boosting
   - Random Forest
 
-While the hybrid approaches resulted in a performance gain, the complete approaches outperformed consistently.
+While the hybrid approaches resulted in a performance gain, the complete approaches outperformed often.
+For the final submission we chose the best performing model for each customer.
 
 ### Prioritization
 Not all predictions will count equally important into the final evaluation score.
