@@ -46,7 +46,7 @@ This is, why we analysed which customers consume most of the total energy in a r
 As the region portfolio *ES* (Spain) weighted more importantly and has less customers than the region portfolio *IT* (Italy) which had much more customers, we focussed on optimizing spanish customers with high consumption profiles.
 
 For each customer, we trained different models, and finally chose predictions from those that consistently outperformed.
-Due to time constrains, we focussed on chooseing best models for Spanish companies, while for all others we chose *Gradient Boosting* as a default model.
+Due to time constrains, we focussed on choosing best models for Spanish companies, while for all others we chose *Gradient Boosting* as a default model.
 
 ## Repository & Installation
 
