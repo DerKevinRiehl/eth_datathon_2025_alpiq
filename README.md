@@ -5,6 +5,13 @@
 
 **Members:** Kevin Riehl, Alexander Faroux, Cedric Zeiter, Anja Sjöström
 
+<table>
+    <tr>
+        <td><img src="figures/Prediction.png"  width="500"/></td>
+    </tr>
+</table>
+
+
 ## Description
 
 To tackle the challenge of predicting energy consumption on the market of Spain and Italy, we came up with a couple of time series predictions, and evaluation strategies that will be outlined in the following.

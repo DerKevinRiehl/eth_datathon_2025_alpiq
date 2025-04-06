@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 data/2_processed/
+data/forecasts/
 
 *.7z

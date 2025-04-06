@@ -1,8 +1,8 @@
 # #############################################################################
-# ##### Competition: DATATHON 2025 - ETH ZÃ¼rich
+# ##### Competition: DATATHON 2025 - ETH Zürich
 # ##### Challenge: ALPIQ Challenge (Predict Energy Consumption for Italy and Spain)
 # ##### Team: Gradient Descenters
-# ##### Members: Kevin Riehl, Alexander Faroux, Cedric Zeiter, Anja SjÃ¶strÃ¶m
+# ##### Members: Kevin Riehl, Alexander Faroux, Cedric Zeiter, Anja Sjöström
 # #############################################################################
 
 
@@ -21,23 +21,51 @@ from sklearn.ensemble import RandomForestRegressor
 
 
 
+
+# #############################################################################
+# PARAMETERS
+# #############################################################################
+    # FILES & PATHS
+INPUT_DATA_PATH = "../data/"
+OUTPUT_DATA_PATH = "../data/submission/"
+    # GENERAL
+COUNTRIES = ["IT", "ES"]
+MODEL_TYPES_AVAILABLE = ["mean", "hourlymean", "hourlymean7", "hourlymean7_gb", "gradboost", "expsmooth"]
+MODEL_TYPES_NONANY = ["hourlymean7_gb", "gradboost", "randomforest"]
+    # SELECTION FILTER TIME
+LOADING_DATE_FROM = pd.Timestamp("2022-01-01 00:00:00")
+# LOADING_DATE_TO = pd.Timestamp("2022-05-31 23:00:00")
+LOADING_DATE_TO = pd.Timestamp("2024-07-31 23:00:00")
+TRAINING_DATE_RANGE = [pd.Timestamp("2022-01-01 00:00:00"), pd.Timestamp("2024-05-31 23:00:00")]
+INFERENCE_DATE_RANGE = [pd.Timestamp("2024-06-01 00:00:00"), pd.Timestamp("2024-07-31 23:00:00")]
+    # FORECAST PARAMS
+COUNTRY = "ES"
+MODEL_TYPE = "hourlymean7"
+STORE_FORECAST = True
+EVALUATE_FORECASTS = False
+
+
+
+
 # #############################################################################
 # DATA LOADING
 # #############################################################################
-def load_data(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S"):
+def load_data(country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S"):
     """
     This function loadas all data into a dataframe.
     This includes consumption data (to be predicted) and features (to explain).
     """
         # LOAD TABLES
-    consumptions_path = join(path, "historical_metering_data_" + country + ".csv")
-    features_path = join(path, "spv_ec00_forecasts_es_it.xlsx")
+    consumptions_path = join(INPUT_DATA_PATH, "OneDrive_2025-04-05", "Alpiq ETHdatathon challenge 2025", "datasets2025", "historical_metering_data_" + country + ".csv")
+    features_path = join(INPUT_DATA_PATH, "OneDrive_2025-04-05", "Alpiq ETHdatathon challenge 2025", "datasets2025", "spv_ec00_forecasts_es_it.xlsx")
+    holiday_path = join(INPUT_DATA_PATH, "OneDrive_2025-04-05", "Alpiq ETHdatathon challenge 2025", "datasets2025", "holiday_"+country+".xlsx")
+    rollout_path = join(INPUT_DATA_PATH, "OneDrive_2025-04-05", "Alpiq ETHdatathon challenge 2025", "datasets2025", "rollout_data_"+country+".csv")
     consumptions = pd.read_csv(consumptions_path, index_col=0, parse_dates=True, date_format=date_format)
     features = pd.read_excel(features_path, sheet_name=country, index_col=0, parse_dates=True, date_format=date_format,)
-    holidays = pd.read_excel(path+"/holiday_"+country+".xlsx")["holiday_"+country]
+    holidays = pd.read_excel(holiday_path)["holiday_"+country]
     holidays = pd.to_datetime(holidays)
     df_oil, df_msci = load_economic_features()
-    features_rollouts = pd.read_csv(path+"/rollout_data_"+country+".csv")
+    features_rollouts = pd.read_csv(rollout_path)
         # MODIFY COLUMNS & FILTER RELEVANT TIME SPAN
     consumptions['total_consumption'] = consumptions.sum(axis=1)
     consumptions = consumptions.reset_index()
@@ -72,18 +100,17 @@ def load_economic_features():
         - MSCI_IT (daily economic activtiy of Italy, according to MSCI Italy Index)
         - MSCI_ES (daily economic activtiy of Spain, according to MSCI Spain Index)
     """
-    df_oil = pd.read_csv(input_data_path2+"oil_prices_open.csv")
+    df_oil = pd.read_csv(join(INPUT_DATA_PATH, "oil_prices.csv"))
     df_oil['date'] = pd.to_datetime(df_oil['Date'])
     df_oil = df_oil[["date", "OilOpen"]]
     df_oil['date'] = pd.to_datetime(df_oil['date']).dt.tz_localize(None)
-    df_msci = pd.read_csv(input_data_path3+"MSCI_"+country+".csv", sep=",")
     if country == "ES":
-        df_msci = pd.read_csv(input_data_path3+"MSCI_"+country+".csv", sep=";")
+        df_msci = pd.read_csv(join(INPUT_DATA_PATH, "MSCI_"+country+".csv"), sep=";")
         df_msci['date'] = pd.to_datetime(df_msci['Date'])
         df_msci = df_msci[["date", "Open"]]
         df_msci = df_msci.rename(columns={"Open":"MSCI_national"})
     else:
-        df_msci = pd.read_csv(input_data_path3+"MSCI_"+country+".csv", sep=",")
+        df_msci = pd.read_csv(join(INPUT_DATA_PATH, "MSCI_"+country+".csv"), sep=",")
         df_msci['date'] = pd.to_datetime(df_msci['Date'])
         df_msci = df_msci[["date", "Close"]]
         df_msci = df_msci.rename(columns={"Close":"MSCI_national"})
@@ -201,6 +228,8 @@ def get_data_for_customer(customer, consumptions, features):
     return Y, X
 
 
+
+
 # #############################################################################
 # PREDICTION MODELS
 # #############################################################################
@@ -209,7 +238,7 @@ def train_model_MEAN(Y):
     return mean
 
 def do_forecast_MEAN(mean):   
-    forecast_time = pd.date_range(start=testing_date_range[0], end=testing_date_range[1], freq='H')
+    forecast_time = pd.date_range(start=INFERENCE_DATE_RANGE[0], end=INFERENCE_DATE_RANGE[1], freq='H')
     Y_forecast = pd.DataFrame({'time': forecast_time})
     Y_forecast["consumption"] = mean
     return Y_forecast 
@@ -223,7 +252,7 @@ def train_model_HOURLYMEAN(Y):
     return hourly_means
 
 def do_forecast_HOURLYMEAN(hourly_means):
-    forecast_time = pd.date_range(start=testing_date_range[0], end=testing_date_range[1], freq='H')
+    forecast_time = pd.date_range(start=INFERENCE_DATE_RANGE[0], end=INFERENCE_DATE_RANGE[1], freq='H')
     Y_forecast = pd.DataFrame({'time': forecast_time})
     Y_forecast['hour'] = Y_forecast['time'].dt.hour
     Y_forecast["consumption"] = Y_forecast['hour'].map(hourly_means)
@@ -239,7 +268,7 @@ def train_model_HOURLYMEAN7(Y):
     return weekly_hourly_means
 
 def do_forecast_HOURLYMEAN7(weekly_hourly_means):
-    forecast_time = pd.date_range(start=testing_date_range[0], end=testing_date_range[1], freq='H')
+    forecast_time = pd.date_range(start=INFERENCE_DATE_RANGE[0], end=INFERENCE_DATE_RANGE[1], freq='H')
     Y_forecast = pd.DataFrame({'time': forecast_time})
     Y_forecast['day_of_week'] = Y_forecast['time'].dt.dayofweek
     Y_forecast['hour'] = Y_forecast['time'].dt.hour
@@ -266,7 +295,7 @@ def do_forecast_HOURLYMEAN7_GB(model, X_test, customer):
     grad_boost = model[0]
     weekly_hourly_means = model[1]
     X_test_sub  = X_test [["spv", "temp", "day_nr_inc", "is_holiday", "is_weekend", "month", "day_of_week", "hour", "INITIALROLLOUTVALUE_"+customer, "OilOpen", "MSCI_national", "dst_change_day", "dst_change_hour", "is_summer_time"]]
-    forecast_time = pd.date_range(start=testing_date_range[0], end=testing_date_range[1], freq='H')
+    forecast_time = pd.date_range(start=INFERENCE_DATE_RANGE[0], end=INFERENCE_DATE_RANGE[1], freq='H')
     Y_forecast = pd.DataFrame({'time': forecast_time})
     Y_forecast['day_of_week'] = Y_forecast['time'].dt.dayofweek
     Y_forecast['hour'] = Y_forecast['time'].dt.hour
@@ -276,15 +305,13 @@ def do_forecast_HOURLYMEAN7_GB(model, X_test, customer):
     return Y_forecast 
 
 def train_model_GRADBOOST(X,Y):
-
     Y = Y.fillna(0)
     grad_boost = HistGradientBoostingRegressor().fit(X.drop(['time', 'month'],axis = 1),Y['consumption'])
     return grad_boost
 
 def do_forecast_GRADBOOST(gradboost, X):
-
     pred_grad_boost = gradboost.predict(X.drop(['time', 'month'],axis = 1))
-    forecast_time = pd.date_range(start=testing_date_range[0], end=testing_date_range[1], freq='H')
+    forecast_time = pd.date_range(start=INFERENCE_DATE_RANGE[0], end=INFERENCE_DATE_RANGE[1], freq='H')
     Y_forecast = pd.DataFrame({'time': forecast_time})
     Y_forecast['day_of_week'] = Y_forecast['time'].dt.dayofweek
     Y_forecast['hour'] = Y_forecast['time'].dt.hour
@@ -294,26 +321,19 @@ def do_forecast_GRADBOOST(gradboost, X):
 def train_model_RANDOMFOREST(X,Y):
     X = X.fillna(0)
     Y = Y.fillna(0)
-    random_forest = RandomForestRegressor(
-        n_estimators=100,  # Number of trees in the forest (default: 100)
-        max_depth=None,    # Maximum depth of the tree (default: None, fully grown trees)
-        random_state=42    # Set a random state for reproducibility
-    )
+    random_forest = RandomForestRegressor(n_estimators=100, max_depth=None, random_state=42)
     random_forest.fit(X.drop(['time', 'month'], axis=1), Y['consumption'])
     return random_forest
 
 def do_forecast_RANDOMFOREST(random_forest, X):
     X = X.fillna(0)
     pred_random_forest = random_forest.predict(X.drop(['time', 'month'], axis=1))
-    forecast_time = pd.date_range(start=testing_date_range[0], end=testing_date_range[1], freq='H')
+    forecast_time = pd.date_range(start=INFERENCE_DATE_RANGE[0], end=INFERENCE_DATE_RANGE[1], freq='H')
     Y_forecast = pd.DataFrame({'time': forecast_time})
     Y_forecast['day_of_week'] = Y_forecast['time'].dt.dayofweek
     Y_forecast['hour'] = Y_forecast['time'].dt.hour
     Y_forecast['consumption'] = pred_random_forest
     return Y_forecast
-
-
-
 
 def train_model(Y, X, customer, modelType):
     if modelType=="mean":
@@ -354,38 +374,16 @@ def do_forecast(model, modelType, X, customer):
 
 
 
-# PARAMETERS
-input_data_path = "../data/1_original/OneDrive_2025-04-05/Alpiq ETHdatathon challenge 2025/datasets2025/"
-input_data_path2 = "../data/1_original/Alex/"
-input_data_path3 = "../data/1_original/Kev/"
+# #############################################################################
+# PREDICTION MAIN CODE
+# #############################################################################
 
-output_data_path = "../data/2_processed/"
-countries = ["IT", "ES"]
-training_date_from = pd.Timestamp("2022-01-01 00:00:00")
-# training_date_to = pd.Timestamp("2022-05-31 23:00:00")
-training_date_to = pd.Timestamp("2024-07-31 23:00:00")
-
-training_date_range = [pd.Timestamp("2022-01-01 00:00:00"), pd.Timestamp("2024-05-31 23:00:00")]
-testing_date_range = [pd.Timestamp("2024-06-01 00:00:00"), pd.Timestamp("2024-07-31 23:00:00")]
-
-
-forecast_steps = 24*31
-max_threads = 4  # Maximum number of threads to run in parallel
-country = "ES"
-model_types = ["mean", "hourlymean", "hourlymean7", "hourlymean7_gb", "gradboost", "expsmooth"]
-model_types_nonan = ["hourlymean7_gb", "gradboost", "randomforest"]
-modelType = "gradboost"
-
-
-
-
-# """
 # INFERENCE
-fW = open("logger_"+modelType+".txt", "w+")
+fW = open("logger_"+MODEL_TYPE+".txt", "w+")
 region_data = {}
 for country in ["ES", "IT"]:
     # STEP 1: LOAD DATA
-    consumptions, features, customer_names = load_data(input_data_path, country, training_date_from, training_date_to, date_format="%Y-%m-%d %H:%M:%S")
+    consumptions, features, customer_names = load_data(country, LOADING_DATE_FROM, LOADING_DATE_TO, date_format="%Y-%m-%d %H:%M:%S")
     customer = customer_names[0]
     region_true = []
     region_pred = []
@@ -395,107 +393,73 @@ for country in ["ES", "IT"]:
         # STEP 3: TRAIN MODEL
         Y_train = Y.copy()
         Y_test = Y.copy()
-        Y_train = Y_train[(Y_train["time"] >= training_date_range[0]) & (Y_train["time"] <= training_date_range[1])]
-        Y_test = Y_test[(Y_test["time"] >= testing_date_range[0]) & (Y_test["time"] <= testing_date_range[1])]
-        # first_non_nan_index = Y_train['consumption'].first_valid_index()
-        # if first_non_nan_index is None:
-            # if modelType in model_types_nonan:
-                # modelType = "hourlymean7"
-        # else:
-            # first_non_nan_date = Y_train.loc[first_non_nan_index, 'time']
-        # Y_train = Y_train[(Y_train["time"] >= first_non_nan_date)]
-        if modelType in model_types_nonan:
+        Y_train = Y_train[(Y_train["time"] >= TRAINING_DATE_RANGE[0]) & (Y_train["time"] <= TRAINING_DATE_RANGE[1])]
+        Y_test = Y_test[(Y_test["time"] >= INFERENCE_DATE_RANGE[0]) & (Y_test["time"] <= INFERENCE_DATE_RANGE[1])]
+        if MODEL_TYPE in MODEL_TYPES_NONANY:
             Y_train["consumption"] = Y_train["consumption"].fillna(0)
         Y_train = Y_train.reset_index()
         Y_test = Y_test.reset_index()
         X_train = X.copy()
         X_test = X.copy()
-        X_train = X_train[(X_train["time"] >= training_date_range[0]) & (X_train["time"] <= training_date_range[1])]
-        # X_train = X_train[(X_train["time"] >= first_non_nan_date)]
-        X_test = X_test[(X_test["time"] >= testing_date_range[0]) & (X_test["time"] <= testing_date_range[1])]
+        X_train = X_train[(X_train["time"] >= TRAINING_DATE_RANGE[0]) & (X_train["time"] <= TRAINING_DATE_RANGE[1])]
+        X_test = X_test[(X_test["time"] >= INFERENCE_DATE_RANGE[0]) & (X_test["time"] <= INFERENCE_DATE_RANGE[1])]
         X_train = X_train.reset_index()
         X_test = X_test.reset_index()
         # Train Model
-        model = train_model(Y_train, X_train, customer, modelType)
+        model = train_model(Y_train, X_train, customer, MODEL_TYPE)
         # STEP 4: PREDICTION
-        Y_forecast = do_forecast(model, modelType, X_test, customer)
-        # Store Results
-        region_true.append(Y_test["consumption"].tolist())
-        region_pred.append(Y_forecast["consumption"].tolist())
-        # Evaluate For That Company
-        eval_score = np.sum(np.abs(np.asarray(Y_forecast["consumption"]) - np.asarray(Y_test["consumption"])))
-        print(country, customer, modelType, eval_score)
-        fW.write(str(country))
-        fW.write("\t")
-        fW.write(str(customer))
-        fW.write("\t")
-        fW.write(str(eval_score))
-        fW.write("\t")
-        fW.write("\n")
+        Y_forecast = do_forecast(model, MODEL_TYPE, X_test, customer)
+        if STORE_FORECAST:
+            Y_forecast.to_csv("../data/forecasts/"+MODEL_TYPE+"/"+customer+".csv", index=None)
+        if EVALUATE_FORECASTS:
+            # Store Results
+            region_true.append(Y_test["consumption"].tolist())
+            region_pred.append(Y_forecast["consumption"].tolist())
+            # Evaluate For That Company
+            eval_score = np.nansum(np.abs(np.asarray(Y_forecast["consumption"]) - np.asarray(Y_test["consumption"])))
+            print(country, customer, MODEL_TYPE, eval_score)
+            fW.write(str(country))
+            fW.write("\t")
+            fW.write(str(customer))
+            fW.write("\t")
+            fW.write(str(eval_score))
+            fW.write("\t")
+            fW.write("\n")
     region_data[country] = {}
     region_data[country]["true"] = region_true
     region_data[country]["pred"] = region_pred
 fW.close()
 
-
-
 # EVALUATION
-team_name = "Gradient Descenters"
-absolute_error = {}
-portfolio_error = {}
-for country in ['ES', 'IT']:
-    # Country Error
-    country_error = 0
-    for company_ctr in range(0, len(region_data[country]["true"])):
-        company_true = np.asarray(region_data[country]["true"][company_ctr])
-        company_pred = np.asarray(region_data[country]["pred"][company_ctr])
-        country_error += np.nansum(np.abs(np.asarray(company_pred - company_true)))
-    # Portfolio Country Error
-    portfolio_sum_true = []
-    portfolio_sum_pred = []
-    for company_ctr in range(0, len(region_data[country]["true"])):
-        company_true = np.asarray(region_data[country]["true"][company_ctr])
-        company_pred = np.asarray(region_data[country]["pred"][company_ctr])
-        portfolio_sum_true.append(company_true) 
-        portfolio_sum_pred.append(company_pred)
-    portfolio_sum_true = np.nansum(np.asarray(portfolio_sum_true), axis=0)
-    portfolio_sum_pred = np.nansum(np.asarray(portfolio_sum_pred), axis=0)
-    portfolio_country_error = np.sum(np.nansum(np.abs(portfolio_sum_pred-portfolio_sum_true)))
-    absolute_error[country] = country_error
-    portfolio_error[country] = portfolio_country_error
-# Final Forecast Score
-forecast_score = (
-    1.0*absolute_error['IT'] + 5.0*absolute_error['ES'] + 
-    10.0*portfolio_error['IT'] + 50.0*portfolio_error['ES']
-)
-print(">>", modelType)
-print('The team ' + team_name + ' reached a forecast score of ' +
-      str(np.round(forecast_score, 0)))
-
-
-
-
-# VISUALIZATION
-plt.figure(figsize=(12,6))
-ctr = 1
-for country in ['ES', 'IT']:
-    plt.subplot(1,2,ctr)
-    plt.title("Prediction "+country)
-    ctr+=1
-    # Portfolio Country Error
-    portfolio_sum_true = []
-    portfolio_sum_pred = []
-    for company_ctr in range(0, len(region_data[country]["true"])):
-        company_true = np.asarray(region_data[country]["true"][company_ctr])
-        company_pred = np.asarray(region_data[country]["pred"][company_ctr])
-        portfolio_sum_true.append(company_true) 
-        portfolio_sum_pred.append(company_pred)
-        
-    portfolio_sum_true = np.nansum(np.asarray(portfolio_sum_true), axis=0)
-    portfolio_sum_pred = np.nansum(np.asarray(portfolio_sum_pred), axis=0)
-    
-    plt.plot(portfolio_sum_true, label="true")
-    plt.plot(portfolio_sum_pred, label="pred")
-    plt.legend()
-plt.tight_layout()
-# """
+if EVALUATE_FORECASTS:
+    team_name = "Gradient Descenters"
+    absolute_error = {}
+    portfolio_error = {}
+    for country in ['ES', 'IT']:
+        # Country Error
+        country_error = 0
+        for company_ctr in range(0, len(region_data[country]["true"])):
+            company_true = np.asarray(region_data[country]["true"][company_ctr])
+            company_pred = np.asarray(region_data[country]["pred"][company_ctr])
+            country_error += np.nansum(np.abs(np.asarray(company_pred - company_true)))
+        # Portfolio Country Error
+        portfolio_sum_true = []
+        portfolio_sum_pred = []
+        for company_ctr in range(0, len(region_data[country]["true"])):
+            company_true = np.asarray(region_data[country]["true"][company_ctr])
+            company_pred = np.asarray(region_data[country]["pred"][company_ctr])
+            portfolio_sum_true.append(company_true) 
+            portfolio_sum_pred.append(company_pred)
+        portfolio_sum_true = np.nansum(np.asarray(portfolio_sum_true), axis=0)
+        portfolio_sum_pred = np.nansum(np.asarray(portfolio_sum_pred), axis=0)
+        portfolio_country_error = np.sum(np.nansum(np.abs(portfolio_sum_pred-portfolio_sum_true)))
+        absolute_error[country] = country_error
+        portfolio_error[country] = portfolio_country_error
+    # Final Forecast Score
+    forecast_score = (
+        1.0*absolute_error['IT'] + 5.0*absolute_error['ES'] + 
+        10.0*portfolio_error['IT'] + 50.0*portfolio_error['ES']
+    )
+    print(">>", MODEL_TYPE)
+    print('The team ' + team_name + ' reached a forecast score of ' +
+          str(np.round(forecast_score, 0)))
