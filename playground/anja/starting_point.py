@@ -122,24 +122,43 @@ country = "IT"
 
 # STEP 1: LOAD DATA
 consumptions, features, customer_names = loadData(input_data_path, country, training_date_from, training_date_to, date_format="%Y-%m-%d %H:%M:%S")
-customer = customer_names[685] ######
+customer = customer_names[1135] ######
 
 # STEP 2: CLEAN DATA
 Y, X = getDataForCustomer(customer, consumptions, features)
 
-X = X.fillna(0)
 Y = Y.fillna(0)
+
+train_test_split = 19000
+
+X_train = X.iloc[:train_test_split]
+X_test = X.iloc[train_test_split:]
+
+y_train = Y.iloc[:train_test_split]
+y_test = Y.iloc[train_test_split:]
+
+X_train_LSTM = X_train.copy()
+X_train_LSTM = X_train_LSTM.fillna(0)
+
+X_test_LSTM = X_test.copy()
+X_test_LSTM = X_test_LSTM.fillna(0)
 
 scaler_Y = MinMaxScaler(feature_range=(0, 1))
 scaler_X = MinMaxScaler(feature_range=(0, 1))
 
-Y_scaled = scaler_Y.fit_transform(np.array(Y['consumption']).reshape(-1, 1))
-X_scaled = scaler_X.fit_transform(X.drop(['time'],axis = 1))
+Y_scaled = scaler_Y.fit_transform(np.array(y_train['consumption']).reshape(-1, 1))
+X_scaled = scaler_X.fit_transform(X_train_LSTM.drop(['time'],axis = 1))
+
+Y_scaled_test = scaler_Y.fit_transform(np.array(y_test['consumption']).reshape(-1, 1))
+X_scaled_test = scaler_X.fit_transform(X_test_LSTM.drop(['time'],axis = 1))
 
 timesteps = 10
 X_data, Y_data = create_dataset(X_scaled, Y_scaled, timesteps)
+X_data_test, Y_data_test = create_dataset(X_scaled_test, Y_scaled_test, timesteps)
+
 
 X_data = X_data.reshape((X_data.shape[0], X_data.shape[1], X_data.shape[2]))
+X_data_test = X_data_test.reshape((X_data_test.shape[0], X_data_test.shape[1], X_data_test.shape[2]))
 
 model = Sequential()
 model.add(LSTM(units=50, input_shape=(X_data.shape[1], X_data.shape[2])))
@@ -152,13 +171,14 @@ model.compile(optimizer='adam', loss='mean_squared_error')
 model.fit(X_data, Y_data, epochs=10, batch_size=1)
 
 # Making predictions
-predictions = model.predict(X_data)
+predictions = model.predict(X_data_test)
 
 # Inverse scaling (if you used MinMaxScaler)
 predictions_rescaled = scaler_Y.inverse_transform(predictions)
 
 # Print predictions (and optionally plot the results)
 print(predictions_rescaled)
+print(len(predictions_rescaled))
 
 #X = X.fillna(0)
 #Y = Y.fillna(0)
@@ -169,13 +189,7 @@ print(predictions_rescaled)
 
 # STEP 3: TRAIN MODEL
 
-train_test_split = 19000
-
-X_train = X.iloc[:train_test_split]
-X_test = X.iloc[train_test_split:]
-
-y_train = Y.iloc[:train_test_split]
-y_test = Y.iloc[train_test_split:]
+pred_lstm = predictions_rescaled
 
 #reg = LinearRegression().fit(X_train.drop('time',axis = 1),y_train['consumption'])
 #reg_small = LinearRegression().fit(X_train.drop(['time', 'month'],axis = 1),y_train['consumption'])
@@ -197,12 +211,12 @@ Y_forecast["Y"] = np.mean(Y["consumption"])
 #print('Error reg small: ' + str((y_test['consumption'] - pred_small).abs().sum()))
 print('Error mean: ' + str((y_test['consumption'] - pred_mean).abs().sum()))
 print('Error gradient boosting: ' + str((y_test['consumption'] - pred_grad_boost).abs().sum()))
-print('Error LSTM: ' + str((y_test['consumption'] - predictions_rescaled).abs().sum()))
+print('Error LSTM: ' + str((y_test['consumption'] - pred_lstm).abs().sum()))
 print('Total test volume: ' + str(y_test['consumption'].sum()))
 
 Y['train_test'] = (Y.index >= train_test_split)
 
-extended_pred = pd.DataFrame({'train_test': Y['train_test'].values, 'consumption': pd.concat([y_train['consumption'], pd.Series(predictions_rescaled)]).values})
+extended_pred = pd.DataFrame({'train_test': Y['train_test'].values, 'consumption': pd.concat([y_train['consumption'], pd.Series(pred_lstm)]).values})
 
 fig, ax = plt.subplots(1,1,figsize = (30,4))
 sns.lineplot(Y, x = Y.index, y = 'consumption')
