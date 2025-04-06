@@ -29,7 +29,7 @@ First, we developed baseline models that serve as a benchmark, where *Hourly Mea
 Next, we tried two approaches based on Machine Learning.
 - Hybrid approaches, where we try to explain residuals of *Hourly Mean 7* with machine learning models.
 - Complete approaches, where we learn from the time series directly with machine learning models.
-  - Gradien Boosting
+  - Gradient Boosting
   - Random Forest
 
 While the hybrid approaches resulted in a performance gain, the complete approaches outperformed consistently.
