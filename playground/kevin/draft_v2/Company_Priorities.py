@@ -135,11 +135,18 @@ customer_columns = [col for col in consumptions.columns if col.startswith("VALUE
 customer_sums = consumptions[customer_columns].sum()
 total_sum = customer_sums.sum()
 percentage_contributions = (customer_sums / total_sum) * 100
-sorted_contributions = percentage_contributions.sort_values(ascending=False)
-sorted_contributions.index = sorted_contributions.index.str.replace("VALUEMWHMETERINGDATA_", "", regex=False)
-cumulative_contributions = sorted_contributions.cumsum()
+percentage_contributions.index = percentage_contributions.index.str.replace("VALUEMWHMETERINGDATA_", "", regex=False)
 result_df = pd.DataFrame({
-    "Rank": range(1, len(cumulative_contributions) + 1),
-    "Customer": cumulative_contributions.index,
-    "Cumulative Contribution": cumulative_contributions.values
+    "Customer": percentage_contributions.index,
+    "Contribution": percentage_contributions.values
 })
+result_df.to_excel("Priority_"+country+".xlsx", index=None)
+
+# sorted_contributions = percentage_contributions.sort_values(ascending=False)
+# sorted_contributions.index = sorted_contributions.index.str.replace("VALUEMWHMETERINGDATA_", "", regex=False)
+# cumulative_contributions = sorted_contributions.cumsum()
+# result_df = pd.DataFrame({
+#     "Rank": range(1, len(cumulative_contributions) + 1),
+#     "Customer": cumulative_contributions.index,
+#     "Cumulative Contribution": cumulative_contributions.values
+# })

@@ -1,0 +1,10 @@
+msci_ES.csv
+	https://www.investing.com/indices/msci-spain-historical-data
+	MIES00000PEU
+
+msci_IT.csv
+	https://www.finanzen.ch/etf/preischart/ishares-msci-italy-etf-us46434g8309
+	US46434G8309
+	
+oil_prices.csv
+	(see subfolder scraping_oil)
