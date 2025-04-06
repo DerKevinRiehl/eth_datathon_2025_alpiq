@@ -4,18 +4,17 @@ from os.path import join
 from datetime import datetime
 
 date_format = '%Y-%m-%d %H:%M:%S'
-student_path = r"outputs"
+student_path = "outputs"
 testing_set_path = r"datasets2025"
 
 absolute_error = {}
 portfolio_error = {} 
 
-for team_name in ['OurCoolTeamName']:
+for team_name in ['X']:
 
     try:
         for country in ['ES', 'IT']:
-            student_solution_path = join(
-                student_path, "students_results_" + team_name + '_' + country + ".csv")
+            student_solution_path = student_path+"/students_results_" + team_name + '_' + country + ".csv"
             student_solution = pd.read_csv(
                 student_solution_path, index_col=0, parse_dates=True, date_format=date_format)
             testing_set_fullpath = join(

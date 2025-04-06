@@ -12,6 +12,10 @@
 </table>
 
 
+## Prediction Results
+
+You can find our prediction results in **data/final_submission**.
+
 ## Description
 
 To tackle the challenge of predicting energy consumption on the market of Spain and Italy, we came up with a couple of time series predictions, and evaluation strategies that will be outlined in the following.
