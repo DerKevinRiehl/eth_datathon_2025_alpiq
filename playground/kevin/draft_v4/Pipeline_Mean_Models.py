@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from sklearn.ensemble import HistGradientBoostingRegressor
 from keras.models import Sequential
 from keras.layers import LSTM, Dense
+from sklearn.ensemble import RandomForestRegressor
 
 # METHODS
 def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S"):
@@ -42,6 +43,21 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
     features3['day_of_week'] = features3['time'].dt.dayofweek + 1
     features3['year'] = features3['time'].dt.year
     features3['hour'] = features3['time'].dt.hour
+    # ECONOMIC DATA
+    df_oil = pd.read_csv(input_data_path2+"oil_prices_open.csv")
+    df_oil['date'] = pd.to_datetime(df_oil['Date'])
+    df_oil = df_oil[["date", "OilOpen"]]
+    df_msci = pd.read_csv(input_data_path3+"MSCI_"+country+".csv", sep=",")
+    if country == "ES":
+        df_msci = pd.read_csv(input_data_path3+"MSCI_"+country+".csv", sep=";")
+        df_msci['date'] = pd.to_datetime(df_msci['Date'])
+        df_msci = df_msci[["date", "Open"]]
+        df_msci = df_msci.rename(columns={"Open":"MSCI_national"})
+    else:
+        df_msci = pd.read_csv(input_data_path3+"MSCI_"+country+".csv", sep=",")
+        df_msci['date'] = pd.to_datetime(df_msci['Date'])
+        df_msci = df_msci[["date", "Close"]]
+        df_msci = df_msci.rename(columns={"Close":"MSCI_national"})
     # Create binary variables for each day of the week (1-7)
     for day in range(1, 8):
         features3[f'day_{day}'] = (features3['time'].dt.dayofweek + 1 == day).astype(int)
@@ -50,6 +66,9 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
         features3[f'month_{month}'] = (features3['time'].dt.month == month).astype(int)
     # CREATE FINAL FEATURE DATASET
     features = features.merge(features2, on="time", how="left").merge(features3, on="time", how="left")
+
+    features['time_stamp_since_inception'] = features.index
+
     # DETERMINE CUSTOMERS
     customer_names = []
     for column_name in consumptions.columns:
@@ -61,7 +80,7 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
 def getDataForCustomer(customer, consumptions, features):
     Y = consumptions[["time", "VALUEMWHMETERINGDATA_"+customer]]
     Y = Y.rename(columns={"VALUEMWHMETERINGDATA_"+customer:"consumption"})
-    X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "day_of_week", "year", "hour", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
+    X = features[['time_stamp_since_inception',"time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "day_of_week", "year", "hour", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12"]]
     return Y, X
 
 def logResiduals(residuals, output_data_path, customer, Y_train):
@@ -130,6 +149,25 @@ def doForecast_GRADBOOST(X,gradboost):
     Y_forecast['consumption'] = pred_grad_boost
     return Y_forecast
 
+def trainModel_RANDOMFOREST(X,Y):
+
+    #X = X.fillna(0)
+    Y = Y.fillna(0)
+    grad_boost = RandomForestRegressor().fit(X.drop(['time', 'month'],axis = 1),Y['consumption'])
+    return grad_boost
+
+def doForecast_RANDOMFOREST(X,randomforest):
+
+    #X = X.fillna(0)
+    pred_grad_boost = randomforest.predict(X.drop(['time', 'month'],axis = 1))
+
+    forecast_time = pd.date_range(start=testing_date_range[0], end=testing_date_range[1], freq='H')
+    Y_forecast = pd.DataFrame({'time': forecast_time})
+    Y_forecast['day_of_week'] = Y_forecast['time'].dt.dayofweek
+    Y_forecast['hour'] = Y_forecast['time'].dt.hour
+    Y_forecast['consumption'] = pred_grad_boost
+    return Y_forecast
+
 def trainModel_LSTM(X,Y):
 
     model = Sequential()
@@ -154,6 +192,8 @@ def trainModel(X, Y, modelType):
         model = trainModel_HOURLYMEAN7(Y)
     elif modelType=='gradboost':
         model = trainModel_GRADBOOST(X,Y)
+    elif modelType=='randomforest':
+        model = trainModel_RANDOMFOREST(X,Y)
     else:
         print("ERR UNKNOWN MODEL ", modelType)
         sys.exit(0)
@@ -168,6 +208,8 @@ def doForecast(X, model, modelType):
         Y_forecast = doForecast_HOURLYMEAN7(model)
     elif modelType=='gradboost':
         Y_forecast = doForecast_GRADBOOST(X,model)
+    elif modelType=='randomforest':
+        Y_forecast = doForecast_RANDOMFOREST(X,model)
     else:
         print("ERR UNKNOWN MODEL ", modelType)
         sys.exit(0)
@@ -178,6 +220,9 @@ def doForecast(X, model, modelType):
 
 # PARAMETERS
 input_data_path = "../../../data/1_original/OneDrive_2025-04-05/Alpiq ETHdatathon challenge 2025/datasets2025/"
+input_data_path2 = "../../../data/1_original/Alex/"
+input_data_path3 = "../../../data/1_original/Kev/"
+
 output_data_path = "../../../data/2_processed/"
 countries = ["IT", "ES"]
 training_date_from = pd.Timestamp("2022-01-01 00:00:00")
@@ -191,8 +236,8 @@ testing_date_range = [pd.Timestamp("2024-06-01 00:00:00"), pd.Timestamp("2024-07
 forecast_steps = 24*31
 max_threads = 4  # Maximum number of threads to run in parallel
 country = "IT"
-model_types = ["mean", "hourlymean", "hourlymean7", "gradboost"]
-modelType = "gradboost"
+model_types = ["mean", "hourlymean", "hourlymean7", "gradboost", 'randomforest']
+modelType = "randomforest"
 
 
 
@@ -211,9 +256,9 @@ for country in ["IT", "ES"]:
         Y, X = getDataForCustomer(customer, consumptions, features)
 
         # Trim time series until first non-NA
-        first_idx = Y.first_valid_index()
-        X = X.loc[first_idx:]
-        Y = Y.loc[first_idx:]
+        #first_idx = Y.first_valid_index()
+        #X = X.loc[first_idx:]
+        #Y = Y.loc[first_idx:]
 
         # STEP 3: TRAIN MODEL
         Y_train = Y.copy()
