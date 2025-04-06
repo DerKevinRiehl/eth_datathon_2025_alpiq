@@ -25,20 +25,20 @@ To evaluate our models, we used all data from *2022-01-01 00:00:00* to *2024-05-
 We chose to do so, as not all companies where available for long time horizons.
 
 ### Models
-First, we developed baseline models that serve as a benchmark, where *Hourly Mean 7* performed best.
+#### Seasonal Analysis
+First, we developed baseline models that learn seasonal patterns that serve as a benchmark, where *Hourly Mean 7* performed best.
 - Mean (the average across the whole available data)
 - Hourly Mean (the average of every hour within a day)
 - Hourly Mean 7 (the average of every hour within a week)
 
-Next, we tried two approaches based on Machine Learning.
-- Hybrid approaches, where we try to explain residuals of *Hourly Mean 7* with machine learning models.
-  - Combination *Hourly Mean 7* and learn residuals with *Gradient Boosting*
-- Complete approaches, where we learn from the time series directly with machine learning models.
-  - Gradient Boosting
-  - Random Forest
+#### Machine Learning Based
+Next, we tried two approaches based on Machine Learning, where we learn from the time series directly with machine learning models.
+- Gradient Boosting
+- Random Forest (implemented, but not used due to runtime limitations)
 
-While the hybrid approaches resulted in a performance gain, the complete approaches outperformed often.
-For the final submission we chose the best performing model for each customer.
+#### Hybrid Seasonal+Learning
+Finally, we also tried hybrid approaches, where we try to explain residuals of *Hourly Mean 7* with machine learning models.
+- Combination *Hourly Mean 7* and learn residuals with *Gradient Boosting*
 
 ### Prioritization
 Not all predictions will count equally important into the final evaluation score.
