@@ -56,6 +56,7 @@ def load_data(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S"
     features = features.merge(df_oil, on="date", how="left")
     features = features.merge(df_msci, on="date", how="left")
     features = features.merge(load_summer_time_features(features), on="time", how="left")
+    features['time_stamp_since_inception'] = features.index # add linear increasing feature
         # DETERMINE CUSTOMERS
     customer_names = []
     for column_name in consumptions.columns:
@@ -102,6 +103,7 @@ def load_time_features(features, holidays, date_from):
         - year        (year)
         - month_X     (whether it is month X)
         - day_X       (whether it is day X)
+        - hour        (the hour of the day)
     Parameters
     ----------
     features : pd:DataFrame
@@ -195,10 +197,8 @@ def load_summer_time_features(features):
 def get_data_for_customer(customer, consumptions, features):
     Y = consumptions[["time", "VALUEMWHMETERINGDATA_"+customer]]
     Y = Y.rename(columns={"VALUEMWHMETERINGDATA_"+customer:"consumption"})
-    X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "day_of_week", "year", "hour", "OilOpen", "MSCI_national", "dst_change_day", "dst_change_hour", "is_summer_time", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
+    X = features[['time_stamp_since_inception', "time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "day_of_week", "year", "hour", "OilOpen", "MSCI_national", "dst_change_day", "dst_change_hour", "is_summer_time", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12"]]
     return Y, X
-
-
 
 
 # #############################################################################
@@ -276,13 +276,13 @@ def do_forecast_HOURLYMEAN7_GB(model, X_test, customer):
     return Y_forecast 
 
 def train_model_GRADBOOST(X,Y):
-    X = X.fillna(0)
+
     Y = Y.fillna(0)
     grad_boost = HistGradientBoostingRegressor().fit(X.drop(['time', 'month'],axis = 1),Y['consumption'])
     return grad_boost
 
 def do_forecast_GRADBOOST(gradboost, X):
-    # X = X.fillna(0)
+
     pred_grad_boost = gradboost.predict(X.drop(['time', 'month'],axis = 1))
     forecast_time = pd.date_range(start=testing_date_range[0], end=testing_date_range[1], freq='H')
     Y_forecast = pd.DataFrame({'time': forecast_time})
@@ -355,11 +355,11 @@ def do_forecast(model, modelType, X, customer):
 
 
 # PARAMETERS
-input_data_path = "../../../data/1_original/OneDrive_2025-04-05/Alpiq ETHdatathon challenge 2025/datasets2025/"
-input_data_path2 = "../../../data/1_original/Alex/"
-input_data_path3 = "../../../data/1_original/Kev/"
+input_data_path = "../data/1_original/OneDrive_2025-04-05/Alpiq ETHdatathon challenge 2025/datasets2025/"
+input_data_path2 = "../data/1_original/Alex/"
+input_data_path3 = "../data/1_original/Kev/"
 
-output_data_path = "../../../data/2_processed/"
+output_data_path = "../data/2_processed/"
 countries = ["IT", "ES"]
 training_date_from = pd.Timestamp("2022-01-01 00:00:00")
 # training_date_to = pd.Timestamp("2022-05-31 23:00:00")
@@ -374,15 +374,7 @@ max_threads = 4  # Maximum number of threads to run in parallel
 country = "ES"
 model_types = ["mean", "hourlymean", "hourlymean7", "hourlymean7_gb", "gradboost", "expsmooth"]
 model_types_nonan = ["hourlymean7_gb", "gradboost", "randomforest"]
-modelType = "randomforest"
-
-
-
-
-
-
-
-
+modelType = "gradboost"
 
 
 

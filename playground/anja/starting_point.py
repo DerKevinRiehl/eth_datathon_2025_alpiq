@@ -127,6 +127,9 @@ customer = customer_names[685] ######
 # STEP 2: CLEAN DATA
 Y, X = getDataForCustomer(customer, consumptions, features)
 
+X = X.fillna(0)
+Y = Y.fillna(0)
+
 scaler_Y = MinMaxScaler(feature_range=(0, 1))
 scaler_X = MinMaxScaler(feature_range=(0, 1))
 
