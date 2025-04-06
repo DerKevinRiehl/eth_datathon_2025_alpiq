@@ -14,8 +14,7 @@
 
 ## Prediction Results
 
-You can find our prediction results in **data/final_submission**.
-You can find our final presentation in **presentation/**.
+You can find our prediction results and presentation in folder **final_submission/**.
 
 ## Description
 
@@ -67,11 +66,10 @@ The structure of the repository is as follows:
 │   ├── msci_IT.csv
 │   ├── oil_prices.csv
 │   ├── sources.txt
-│   ├── scraping_oil/
-│   └── final_submission/
+│   └── scraping_oil/
 ├── figures/
 │   └── ...
-├── presentation/
+├── final_submission/
 │   └── ...
 └── requirements.txt
 ```
