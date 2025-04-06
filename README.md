@@ -15,6 +15,7 @@
 ## Prediction Results
 
 You can find our prediction results in **data/final_submission**.
+You can find our final presentation in **presentation/**.
 
 ## Description
 
@@ -69,6 +70,8 @@ The structure of the repository is as follows:
 │   ├── scraping_oil/
 │   └── final_submission/
 ├── figures/
+│   └── ...
+├── presentation/
 │   └── ...
 └── requirements.txt
 ```
