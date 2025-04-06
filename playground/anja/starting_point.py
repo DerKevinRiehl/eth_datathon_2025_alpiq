@@ -10,6 +10,10 @@ from multiprocessing import Pool
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import HistGradientBoostingRegressor
 import seaborn as sns 
+from sklearn.ensemble import RandomForestRegressor
+from keras.models import Sequential
+from keras.layers import LSTM, Dense
+from sklearn.preprocessing import MinMaxScaler
 
 
 
@@ -47,6 +51,21 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
     features3['day_of_week'] = features3['time'].dt.dayofweek + 1
     features3['year'] = features3['time'].dt.year
     features3['hour'] = features3['time'].dt.hour
+    # ECONOMIC DATA
+    df_oil = pd.read_csv(input_data_path2+"oil_prices_open.csv")
+    df_oil['date'] = pd.to_datetime(df_oil['Date'])
+    df_oil = df_oil[["date", "OilOpen"]]
+    df_msci = pd.read_csv(input_data_path3+"MSCI_"+country+".csv", sep=",")
+    if country == "ES":
+        df_msci = pd.read_csv(input_data_path3+"MSCI_"+country+".csv", sep=";")
+        df_msci['date'] = pd.to_datetime(df_msci['Date'])
+        df_msci = df_msci[["date", "Open"]]
+        df_msci = df_msci.rename(columns={"Open":"MSCI_national"})
+    else:
+        df_msci = pd.read_csv(input_data_path3+"MSCI_"+country+".csv", sep=",")
+        df_msci['date'] = pd.to_datetime(df_msci['Date'])
+        df_msci = df_msci[["date", "Close"]]
+        df_msci = df_msci.rename(columns={"Close":"MSCI_national"})
     # Create binary variables for each day of the week (1-7)
     for day in range(1, 8):
         features3[f'day_{day}'] = (features3['time'].dt.dayofweek + 1 == day).astype(int)
@@ -60,13 +79,16 @@ def loadData(path, country, date_from, date_to, date_format="%Y-%m-%d %H:%M:%S")
     for column_name in consumptions.columns:
         if "VALUEMWH" in column_name:
             customer_names.append("_".join(column_name.split("_")[1:]))
+
+    features['time_stamp_since_inception'] = features.index
+    
     # Return
     return consumptions, features, customer_names
 
 def getDataForCustomer(customer, consumptions, features):
     Y = consumptions[["time", "VALUEMWHMETERINGDATA_"+customer]]
     Y = Y.rename(columns={"VALUEMWHMETERINGDATA_"+customer:"consumption"})
-    X = features[["time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "month", "week", "hour", "day_of_week", "year", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",]]
+    X = features[['time_stamp_since_inception',"time", "spv", "temp", "INITIALROLLOUTVALUE_"+customer, "day_nr_inc", "is_holiday", "is_weekend", "week", "hour", "day_of_week", "year", "day_1", "day_2", "day_3", "day_4", "day_5", "day_6", "day_7", "month_1", "month_2", "month_3", "month_4", "month_5", "month_6", "month_7", "month_8", "month_9", "month_10", "month_11", "month_12"]]
     return Y, X
 
 def analyseDataConsistency(Y):
@@ -77,8 +99,18 @@ def analyseDataConsistency(Y):
     has_nan_later = Y['consumption'].isnull().any()
     return first_non_nan_date, has_nan_later
 
+def create_dataset(X, Y, timesteps=10):
+    X_data, Y_data = [], []
+    for i in range(len(Y) - timesteps):
+        X_data.append(X[i:i+timesteps])  # Select features for timesteps
+        Y_data.append(Y[i+timesteps])    # Target is the next value in Y
+    return np.array(X_data), np.array(Y_data)
+
 # PARAMETERS
 input_data_path = "../../data/1_original/OneDrive_2025-04-05/Alpiq ETHdatathon challenge 2025/datasets2025/"
+input_data_path2 = "../../data/1_original/Alex/"
+input_data_path3 = "../../data/1_original/Kev/"
+
 output_data_path = "../../data/2_processed/"
 countries = ["IT", "ES"]
 training_date_from = pd.Timestamp("2022-01-01 00:00:00")
@@ -90,23 +122,51 @@ country = "IT"
 
 # STEP 1: LOAD DATA
 consumptions, features, customer_names = loadData(input_data_path, country, training_date_from, training_date_to, date_format="%Y-%m-%d %H:%M:%S")
-customer = customer_names[500]
-
-print(features)
+customer = customer_names[685] ######
 
 # STEP 2: CLEAN DATA
 Y, X = getDataForCustomer(customer, consumptions, features)
 
-#X = X.fillna(0)
-Y = Y.fillna(0)
+scaler_Y = MinMaxScaler(feature_range=(0, 1))
+scaler_X = MinMaxScaler(feature_range=(0, 1))
 
-first_idx = X.first_valid_index()
-X = X.loc[first_idx:]
-Y = Y.loc[first_idx:]
+Y_scaled = scaler_Y.fit_transform(np.array(Y['consumption']).reshape(-1, 1))
+X_scaled = scaler_X.fit_transform(X.drop(['time'],axis = 1))
+
+timesteps = 10
+X_data, Y_data = create_dataset(X_scaled, Y_scaled, timesteps)
+
+X_data = X_data.reshape((X_data.shape[0], X_data.shape[1], X_data.shape[2]))
+
+model = Sequential()
+model.add(LSTM(units=50, input_shape=(X_data.shape[1], X_data.shape[2])))
+model.add(Dense(1))  # Output layer
+
+# Compile the model
+model.compile(optimizer='adam', loss='mean_squared_error')
+
+# Train the model
+model.fit(X_data, Y_data, epochs=10, batch_size=1)
+
+# Making predictions
+predictions = model.predict(X_data)
+
+# Inverse scaling (if you used MinMaxScaler)
+predictions_rescaled = scaler_Y.inverse_transform(predictions)
+
+# Print predictions (and optionally plot the results)
+print(predictions_rescaled)
+
+#X = X.fillna(0)
+#Y = Y.fillna(0)
+
+#first_idx = X.first_valid_index()
+#X = X.loc[first_idx:]
+#Y = Y.loc[first_idx:]
 
 # STEP 3: TRAIN MODEL
 
-train_test_split = 21885
+train_test_split = 19000
 
 X_train = X.iloc[:train_test_split]
 X_test = X.iloc[train_test_split:]
@@ -116,11 +176,13 @@ y_test = Y.iloc[train_test_split:]
 
 #reg = LinearRegression().fit(X_train.drop('time',axis = 1),y_train['consumption'])
 #reg_small = LinearRegression().fit(X_train.drop(['time', 'month'],axis = 1),y_train['consumption'])
-grad_boost = HistGradientBoostingRegressor().fit(X_train.drop(['time', 'month'],axis = 1),y_train['consumption'])
+grad_boost = HistGradientBoostingRegressor().fit(X_train.drop(['time'],axis = 1),y_train['consumption'])
+#random_forest = RandomForestRegressor().fit(X_train.drop(['time'],axis = 1),y_train['consumption'])
 
 #pred = reg.predict(X_test.drop('time',axis = 1))
 #pred_small = reg_small.predict(X_test.drop(['time', 'month'],axis = 1))
-pred_grad_boost = grad_boost.predict(X_test.drop(['time', 'month'],axis = 1))
+pred_grad_boost = grad_boost.predict(X_test.drop(['time'],axis = 1))
+#pred_random_forest = random_forest.predict(X_test.drop(['time'],axis = 1))
 
 pred_mean = [y_train['consumption'].mean()] * len(y_test)
    
@@ -132,12 +194,12 @@ Y_forecast["Y"] = np.mean(Y["consumption"])
 #print('Error reg small: ' + str((y_test['consumption'] - pred_small).abs().sum()))
 print('Error mean: ' + str((y_test['consumption'] - pred_mean).abs().sum()))
 print('Error gradient boosting: ' + str((y_test['consumption'] - pred_grad_boost).abs().sum()))
+print('Error LSTM: ' + str((y_test['consumption'] - predictions_rescaled).abs().sum()))
 print('Total test volume: ' + str(y_test['consumption'].sum()))
 
 Y['train_test'] = (Y.index >= train_test_split)
 
-extended_pred = pd.DataFrame({'train_test': Y['train_test'].values, 'consumption': pd.concat([y_train['consumption'], pd.Series(pred_grad_boost)]).values})
-extended_mean = pd.DataFrame({'train_test': Y['train_test'].values, 'consumption': pd.concat([y_train['consumption'], pd.Series(pred_mean)]).values})
+extended_pred = pd.DataFrame({'train_test': Y['train_test'].values, 'consumption': pd.concat([y_train['consumption'], pd.Series(predictions_rescaled)]).values})
 
 fig, ax = plt.subplots(1,1,figsize = (30,4))
 sns.lineplot(Y, x = Y.index, y = 'consumption')
