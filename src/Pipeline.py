@@ -15,7 +15,6 @@ import pandas as pd
 from os.path import join
 import numpy as np
 import sys
-import matplotlib.pyplot as plt
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.ensemble import RandomForestRegressor
 
@@ -30,7 +29,7 @@ INPUT_DATA_PATH = "../data/"
 OUTPUT_DATA_PATH = "../data/submission/"
     # GENERAL
 COUNTRIES = ["IT", "ES"]
-MODEL_TYPES_AVAILABLE = ["mean", "hourlymean", "hourlymean7", "hourlymean7_gb", "gradboost", "expsmooth"]
+MODEL_TYPES_AVAILABLE = ["mean", "hourlymean", "hourlymean7", "hourlymean7_gb", "gradboost", "randomforest"]
 MODEL_TYPES_NONANY = ["hourlymean7_gb", "gradboost", "randomforest"]
     # SELECTION FILTER TIME
 LOADING_DATE_FROM = pd.Timestamp("2022-01-01 00:00:00")
